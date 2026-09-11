@@ -21,7 +21,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=<target> \
   go build -trimpath -o ./bin/giwifi-auto ./cmd/giwifi-auto
 ```
 
-不要仅根据路由器型号选择 `GOARCH`，请在设备上查看：
+请在设备上查看：
 
 ```sh
 ubus call system board
@@ -36,14 +36,14 @@ cp config.example.json config.local.json
 go run ./cmd/giwifi-auto check --config ./config.local.json
 ```
 
-编辑 `config.local.json`，至少填写：
+编辑 `config.local.json`，填写：
 
 - `runtime.portal_login_url`：Portal 登录接口地址
 - `accounts[].username`：认证用户名
 - `accounts[].credential_ref`：密码引用
 - `accounts[].enabled`：是否启用账号
 
-密码通过外部引用读取，不要写入 JSON、命令行参数或 Git。支持以下引用格式：
+密码通过外部引用读取,支持以下引用格式：
 
 - `env:NAME`：环境变量
 - `file:/absolute/path`：权限受限的单行文件
