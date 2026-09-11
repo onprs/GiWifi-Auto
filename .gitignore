@@ -1,0 +1,36 @@
+# Go
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Local configuration and runtime data
+giwifi_config.json
+config.local.json
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.cookie
+*.pcap
+
+# Credentials and private material
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Python sources and generated files
+*.py
+__pycache__/
+*.pyc
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

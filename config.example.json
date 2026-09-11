@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "runtime": {
+    "connectivity_url": "http://captive.apple.com/",
+    "portal_login_url": "",
+    "check_interval_seconds": 30,
+    "request_timeout_seconds": 10,
+    "retry_initial_seconds": 10,
+    "retry_max_seconds": 300,
+    "max_concurrent_requests": 2,
+    "log_level": "info",
+    "event_buffer_size": 256,
+    "control_socket": "/var/run/giwifi-auto.sock"
+  },
+  "accounts": [
+    {
+      "id": "account-primary",
+      "display_name": "示例账号",
+      "username": "example@example.com",
+      "credential_ref": "uci:giwifi-auto.account-primary.password",
+      "enabled": false,
+      "priority": 100,
+      "network_interface": ""
+    }
+  ]
+}
