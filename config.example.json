@@ -14,10 +14,10 @@
   },
   "accounts": [
     {
-      "id": "account-primary",
+      "id": "account_primary",
       "display_name": "示例账号",
       "username": "example@example.com",
-      "credential_ref": "uci:giwifi-auto.account-primary.password",
+      "credential_ref": "uci:giwifi-credentials.account_primary.password",
       "enabled": false,
       "priority": 100,
       "network_interface": ""

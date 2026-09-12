@@ -111,6 +111,28 @@ config runtime 'main'
 	}
 }
 
+func TestParseUCIRejectsInvalidSectionIdentifier(t *testing.T) {
+	data := `package giwifi-auto
+config runtime 'main'
+ option version '1'
+ option connectivity_url 'http://example.test'
+ option check_interval_seconds '30'
+ option request_timeout_seconds '10'
+ option retry_initial_seconds '5'
+ option retry_max_seconds '120'
+ option max_concurrent_requests '1'
+ option log_level 'info'
+ option event_buffer_size '32'
+ option control_socket '/tmp/giwifi-auto.sock'
+config account 'invalid-name'
+ option display_name '示例'
+`
+	_, err := ParseUCI([]byte(data))
+	if err == nil || !strings.Contains(err.Error(), "section 标识无效") {
+		t.Fatalf("错误 = %v, 应拒绝无效 UCI section 名称", err)
+	}
+}
+
 func TestParseUCIRejectsMismatchedAccountID(t *testing.T) {
 	data := `package giwifi-auto
 config runtime 'main'
@@ -124,8 +146,8 @@ config runtime 'main'
  option log_level 'info'
  option event_buffer_size '32'
  option control_socket '/tmp/giwifi-auto.sock'
-config account 'section-name'
- option id 'different-id'
+config account 'section_name'
+ option id 'different_id'
  option display_name '示例'
 `
 	_, err := ParseUCI([]byte(data))

@@ -23,4 +23,4 @@ if [ ! -e /etc/config/giwifi-auto ]; then
 fi
 
 /etc/init.d/giwifi-auto enable
-printf '%s\n' "安装完成，请先编辑 /etc/config/giwifi-auto 并运行 /etc/init.d/giwifi-auto start"
+printf '%s\n' "安装完成，配置文件：/etc/config/giwifi-auto"

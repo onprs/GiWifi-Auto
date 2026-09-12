@@ -115,7 +115,7 @@ func parseUCIDocument(data []byte) (uciDocument, error) {
 			if len(tokens) != 2 || document.packageName != "" {
 				return uciDocument{}, fmt.Errorf("第 %d 行 package 声明无效", lineNumber)
 			}
-			if !validUCIIdentifier(tokens[1]) {
+			if !validUCIPackageName(tokens[1]) {
 				return uciDocument{}, fmt.Errorf("第 %d 行 package 名称无效", lineNumber)
 			}
 			document.packageName = tokens[1]
@@ -353,10 +353,26 @@ func uciPackageName(path string) (string, error) {
 		return "", errors.New("UCI 配置路径无效")
 	}
 	name := filepath.Base(filepath.Clean(path))
-	if !validUCIIdentifier(name) {
+	if !validUCIPackageName(name) {
 		return "", errors.New("UCI package 名称无效")
 	}
 	return name, nil
+}
+
+func validUCIPackageName(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, character := range value {
+		if (character >= 'a' && character <= 'z') ||
+			(character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') ||
+			character == '_' || character == '-' || character == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func validUCIIdentifier(value string) bool {
@@ -367,7 +383,7 @@ func validUCIIdentifier(value string) bool {
 		if (character >= 'a' && character <= 'z') ||
 			(character >= 'A' && character <= 'Z') ||
 			(character >= '0' && character <= '9') ||
-			character == '_' || character == '-' || character == '.' {
+			character == '_' {
 			continue
 		}
 		return false

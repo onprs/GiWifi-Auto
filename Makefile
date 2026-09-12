@@ -2,8 +2,9 @@ BINARY := giwifi-auto
 BUILD_DIR := bin
 VERSION ?= dev
 GO ?= go
+DEPLOY_HOST ?= openwrt
 
-.PHONY: build test vet race fmt check cross-linux
+.PHONY: build test vet race fmt check cross-linux deploy
 
 build:
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY) ./cmd/giwifi-auto
@@ -25,3 +26,6 @@ check: fmt vet test race
 cross-linux:
 	@test -n "$(GOARCH)" || (echo "请指定 GOARCH，例如 GOARCH=mipsle" >&2; exit 1)
 	CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) $(GO) build -trimpath -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY)-$(GOARCH) ./cmd/giwifi-auto
+
+deploy:
+	GIWIFI_DEPLOY_HOST="$(DEPLOY_HOST)" sh ./openwrt/deploy.sh
