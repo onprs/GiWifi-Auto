@@ -251,6 +251,16 @@ func (form *accountForm) formValue(index int, active bool) string {
 	return string(runes[:cursor]) + "|" + string(runes[cursor:])
 }
 
+func (form *accountForm) formFieldLine(index, width int) string {
+	field := form.fields[index]
+	line := field.label + ": " + form.formValue(index, index == form.active)
+	line = pad(clip(line, width), width)
+	if index == form.active {
+		return selectedStyle.Render(line)
+	}
+	return fieldStyle.Render(line)
+}
+
 func (current model) formView() string {
 	width := current.width
 	if width <= 0 {
@@ -258,24 +268,23 @@ func (current model) formView() string {
 	}
 	var output strings.Builder
 	if current.form.editing {
-		output.WriteString(clip("编辑账号", width))
+		output.WriteString(styledLine(titleStyle, "编辑账号", width))
 	} else {
-		output.WriteString(clip("添加账号", width))
+		output.WriteString(styledLine(titleStyle, "添加账号", width))
 	}
 	output.WriteByte('\n')
-	output.WriteString(strings.Repeat("=", minInt(width, 80)))
+	output.WriteString(styledLine(separatorStyle, strings.Repeat("─", minInt(width, 80)), width))
 	output.WriteByte('\n')
 	if current.form.saving {
-		output.WriteString(clip("正在保存...", width))
+		output.WriteString(styledLine(infoStyle, "正在保存...", width))
 		output.WriteByte('\n')
 	}
 	if current.form.err != "" {
-		output.WriteString(clip(current.form.err, width))
+		output.WriteString(styledLine(badStyle, current.form.err, width))
 		output.WriteByte('\n')
 	}
-	for index, field := range current.form.fields {
-		line := field.label + ": " + current.form.formValue(index, index == current.form.active)
-		output.WriteString(clip(line, width))
+	for index := range current.form.fields {
+		output.WriteString(current.form.formFieldLine(index, width))
 		output.WriteByte('\n')
 	}
 	output.WriteByte('\n')
@@ -285,7 +294,7 @@ func (current model) formView() string {
 		"Ctrl+S 保存",
 		"Esc 取消",
 	} {
-		output.WriteString(clip(line, width))
+		output.WriteString(styledLine(keyStyle, line, width))
 		output.WriteByte('\n')
 	}
 	return strings.TrimSuffix(output.String(), "\n")

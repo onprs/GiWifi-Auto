@@ -148,10 +148,13 @@ func TestViewShowsAccountInterfaceAndLineStatus(t *testing.T) {
 		height: 30,
 	}
 	view := current.View()
-	for _, value := range []string{"账号与线路", "[主账号] -> [eth1]", "线路状态", "192.0.2.10", "Enter检测", "D删除"} {
+	for _, value := range []string{"账号与线路", "[主账号]", "eth1", "线路状态", "192.0.2.10", "Enter检测", "D删除"} {
 		if !strings.Contains(view, value) {
 			t.Fatalf("界面缺少 %q: %q", value, view)
 		}
+	}
+	if !strings.Contains(view, "▶") {
+		t.Fatalf("界面没有明确选中标记: %q", view)
 	}
 }
 

@@ -20,9 +20,8 @@ import (
 )
 
 const (
-	refreshInterval  = time.Second
-	maxVisibleLogs   = 5
-	fullAccountWidth = 78
+	refreshInterval = time.Second
+	maxVisibleLogs  = 5
 )
 
 type statusMessage struct {
@@ -242,144 +241,105 @@ func (current model) View() string {
 		height = 24
 	}
 
-	var output strings.Builder
-	output.WriteString(clip("GiWifi-Auto", width))
-	output.WriteByte('\n')
-	output.WriteString(strings.Repeat("=", minInt(width, 80)))
-	output.WriteByte('\n')
-	output.WriteString(clip(current.summaryLine(), width))
-	output.WriteByte('\n')
+	lines := make([]string, 0, height+8)
+	add := func(value string) {
+		lines = append(lines, value)
+	}
+
+	add(styledLine(titleStyle, "GiWifi-Auto  多线路认证面板", width))
+	add(styledLine(subtitleStyle, "实时监控账号认证与网络线路", width))
+	add(styledLine(infoStyle, current.summaryLine(), width))
 	if current.confirmDelete {
-		output.WriteString(clip("确认删除账号 "+current.deleteID+"？按 y 确认，按 n 或 Esc 取消", width))
-		output.WriteByte('\n')
+		add(styledLine(badStyle, "确认删除账号 "+current.deleteID+"？按 y 确认，按 n 或 Esc 取消", width))
 	}
 	if current.loading {
-		output.WriteString(clip("正在加载状态...", width))
-		output.WriteByte('\n')
+		add(styledLine(infoStyle, "正在加载状态...", width))
 	} else if current.err != "" {
-		output.WriteString(clip(current.err, width))
-		output.WriteByte('\n')
+		add(styledLine(badStyle, current.err, width))
 	}
+
+	add("")
+	add(sectionHeading("账号与线路", width))
 	if len(current.accounts) == 0 {
-		output.WriteString(clip("没有可显示的账号", width))
-		output.WriteByte('\n')
+		add(styledLine(mutedStyle, "暂无账号，按 a 添加账号", width))
 	} else {
-		if width < fullAccountWidth {
-			output.WriteString(clip("账号状态", width))
-			output.WriteByte('\n')
-			accountRows := maxInt(1, (height-8)/3)
-			for index, item := range current.accounts {
-				if index >= accountRows {
-					break
-				}
-				marker := " "
-				if index == current.selected {
-					marker = ">"
-				}
-				if width < 12 {
-					output.WriteString(clip(marker+" "+item.ID, width))
-					output.WriteByte('\n')
-					continue
-				}
-				rowWidth := width - 2
-				idWidth := minInt(16, rowWidth/2)
-				stateWidth := maxInt(1, rowWidth-idWidth-1)
-				output.WriteString(marker + " ")
-				output.WriteString(pad(clip(item.ID, idWidth), idWidth))
-				output.WriteByte(' ')
-				output.WriteString(clip(stateLabel(item.State), stateWidth))
-				output.WriteByte('\n')
-				output.WriteString("  ")
-				output.WriteString(clip(item.DisplayName, width-2))
-				output.WriteByte('\n')
-				output.WriteString("  ")
-				output.WriteString(clip(enabledLabel(item.Enabled)+" "+resultLabel(item.LastResult)+" "+nextAttemptLabel(item.NextAttemptAt), width-2))
-				output.WriteByte('\n')
-			}
-		} else {
-			output.WriteString(pad("", 2))
-			output.WriteString(pad("ID", 18))
-			output.WriteString(pad("名称", 16))
-			output.WriteString(pad("状态", 16))
-			output.WriteString(pad("结果", 12))
-			output.WriteString(pad("下次", 10))
-			output.WriteString("启用\n")
-			accountRows := maxInt(1, height-8)
-			for index, item := range current.accounts {
-				if index >= accountRows {
-					break
-				}
-				marker := " "
-				if index == current.selected {
-					marker = ">"
-				}
-				output.WriteString(marker + " ")
-				output.WriteString(pad(item.ID, 18))
-				output.WriteString(pad(item.DisplayName, 16))
-				output.WriteString(pad(stateLabel(item.State), 16))
-				output.WriteString(pad(resultLabel(item.LastResult), 12))
-				output.WriteString(pad(nextAttemptLabel(item.NextAttemptAt), 10))
-				output.WriteString(enabledLabel(item.Enabled))
-				output.WriteByte('\n')
-			}
+		accountLimit := len(current.accounts)
+		if height < 30 {
+			accountLimit = minInt(accountLimit, maxInt(1, (height-12-len(current.interfaces))/2))
+		}
+		for index, item := range current.accounts[:accountLimit] {
+			selected := index == current.selected
+			add(current.renderAccountRoute(item, width, selected))
+			add(current.renderAccountDetail(item, width, selected))
+		}
+		if accountLimit < len(current.accounts) {
+			add(styledLine(mutedStyle, fmt.Sprintf("还有 %d 个账号未显示", len(current.accounts)-accountLimit), width))
 		}
 	}
 
-	output.WriteByte('\n')
-	output.WriteString(current.renderLineStatus(width))
+	add("")
+	add(sectionHeading("线路状态", width))
+	if len(current.interfaces) == 0 {
+		add(styledLine(mutedStyle, "暂无 WAN 接口状态", width))
+	} else {
+		if width >= 80 {
+			add(styledLine(mutedStyle, renderInterfaceHeader(), width))
+		}
+		interfaceLimit := len(current.interfaces)
+		if height < 30 {
+			interfaceLimit = minInt(interfaceLimit, maxInt(1, height-10-2*minInt(len(current.accounts), 4)))
+		}
+		for index, status := range current.interfaces[:interfaceLimit] {
+			add(renderInterfaceLine(status, index, width))
+		}
+		if interfaceLimit < len(current.interfaces) {
+			add(styledLine(mutedStyle, fmt.Sprintf("还有 %d 条线路未显示", len(current.interfaces)-interfaceLimit), width))
+		}
+	}
 
 	if current.showHelp {
-		output.WriteByte('\n')
-		output.WriteString(clip("操作", width))
-		output.WriteByte('\n')
+		add("")
+		add(sectionHeading("操作", width))
 		for _, line := range []string{
 			"q 退出",
-			"j/k 选择账号",
+			"↑/↓ 或 j/k 选择账号",
 			"a 添加账号（只填用户名和密码）",
-			"c 配置当前账号",
+			"c 编辑当前账号",
 			"Enter 立即检查",
-			"e 启用",
-			"d 停用",
+			"e 启用，d 停用",
 			"D/Delete 删除当前账号（需确认）",
 			"l 重载配置",
-			"Space 暂停/继续日志",
-			"x 清空日志视图",
-			"f 筛选当前账号",
-			"r 刷新",
-			"? 返回",
+			"Space 暂停/继续日志，x 清空日志视图",
+			"f 筛选当前账号，r 刷新",
+			"? 返回状态面板",
 		} {
-			output.WriteString(clip(line, width))
-			output.WriteByte('\n')
+			add(styledLine(mutedStyle, line, width))
 		}
 	} else {
-		output.WriteByte('\n')
+		add("")
 		heading := "近期事件"
 		if current.filterID != "" {
-			heading += " " + current.filterID
+			heading += " · " + current.filterID
 		}
 		if current.paused {
-			heading += " 已暂停"
+			heading += " · 已暂停"
 		}
-		output.WriteString(clip(heading, width))
-		output.WriteByte('\n')
+		add(sectionHeading(heading, width))
 		visibleEvents := current.filteredEvents()
-		logRows := maxInt(0, height-outputLineCount(output.String())-1)
-		if logRows > maxVisibleLogs {
-			logRows = maxVisibleLogs
-		}
-		start := maxInt(0, len(visibleEvents)-logRows)
+		eventLimit := minInt(maxVisibleLogs, maxInt(0, height-outputLineCount(strings.Join(lines, "\n"))-2))
+		start := maxInt(0, len(visibleEvents)-eventLimit)
 		for _, event := range visibleEvents[start:] {
-			output.WriteString(renderEvent(event, width))
-			output.WriteByte('\n')
+			add(renderEventLine(event, width))
 		}
 	}
-	output.WriteByte('\n')
+
+	add("")
 	if current.confirmDelete {
-		output.WriteString(clip("删除确认: "+current.deleteID+"  y 确认 / n 取消", width))
+		add(styledLine(badStyle, "删除确认: "+current.deleteID+"  y 确认 / n 取消", width))
 	} else {
-		output.WriteString(clip("↑↓选择  a添加  c编辑  Enter检测  e启用  d停用  D删除  r刷新  ?帮助  q退出", width))
+		add(styledLine(footerStyle, "↑↓选择  a添加  c编辑  Enter检测  e启用  d停用  D删除  r刷新  ?帮助  q退出", width))
 	}
-	return strings.TrimSuffix(output.String(), "\n")
+	return strings.Join(fitViewLines(lines, height), "\n")
 }
 
 func (current model) summaryLine() string {
@@ -401,64 +361,132 @@ func (current model) summaryLine() string {
 	return fmt.Sprintf("账号 %d  启用 %d  已认证 %d  待处理 %d  线路 %d", len(current.accounts), enabled, authenticated, attention, len(current.interfaces))
 }
 
-func (current model) renderLineStatus(width int) string {
-	var output strings.Builder
-	output.WriteString(clip("账号与线路", width))
-	output.WriteByte('\n')
-	if len(current.accounts) == 0 {
-		output.WriteString(clip("暂无账号，按 a 添加账号", width))
-	} else {
-		for index, item := range current.accounts {
-			marker := " "
-			if index == current.selected {
-				marker = ">"
-			}
-			accountConfig, exists := current.accountConfig(item.ID)
-			interfaceName := "未分配"
-			username := "-"
-			if exists {
-				if accountConfig.NetworkInterface != "" {
-					interfaceName = accountConfig.NetworkInterface
-				}
-				if accountConfig.Username != "" {
-					username = accountConfig.Username
-				}
-			}
-			lineStatus := current.interfaceStatus(interfaceName)
-			displayName := item.DisplayName
-			if displayName == "" {
-				displayName = item.ID
-			}
-			line := fmt.Sprintf("%s [%s] -> [%s] -> [%s] -> [%s]", marker, displayName, interfaceName, interfaceLinkLabel(lineStatus), stateLabel(item.State))
-			output.WriteString(clip(line, width))
-			output.WriteByte('\n')
-			detail := fmt.Sprintf("  用户: %s  IPv4: %s  %s  结果: %s  重试: %d  下次: %s  上次成功: %s", username, interfaceIPv4Label(lineStatus), enabledLabel(item.Enabled), resultLabel(item.LastResult), item.RetryCount, nextAttemptLabel(item.NextAttemptAt), successLabel(item.LastSuccessAt))
-			output.WriteString(clip(detail, width))
-			if item.LastError != "" {
-				output.WriteByte('\n')
-				output.WriteString(clip("  原因: "+item.LastError, width))
-			}
-			if index+1 < len(current.accounts) {
-				output.WriteByte('\n')
-			}
-		}
+func sectionHeading(value string, width int) string {
+	prefix := "── " + value + " "
+	lineWidth := minInt(width, 80)
+	remaining := maxInt(0, lineWidth-runewidth.StringWidth(prefix))
+	return styledLine(sectionStyle, prefix+strings.Repeat("─", remaining), width)
+}
+
+func (current model) renderAccountRoute(item account.Snapshot, width int, selected bool) string {
+	accountConfig, exists := current.accountConfig(item.ID)
+	interfaceName := "未分配"
+	if exists && accountConfig.NetworkInterface != "" {
+		interfaceName = accountConfig.NetworkInterface
+	}
+	lineStatus := current.interfaceStatus(interfaceName)
+	displayName := item.DisplayName
+	if displayName == "" {
+		displayName = item.ID
 	}
 
-	output.WriteByte('\n')
-	output.WriteString(clip("线路状态", width))
-	output.WriteByte('\n')
-	if len(current.interfaces) == 0 {
-		output.WriteString(clip("暂无 WAN 接口状态", width))
+	var route string
+	if width >= 80 {
+		route = routeToken(displayName, 18) + " -> " +
+			routeToken(interfaceName, 16) + " -> " +
+			routeToken(interfaceLinkLabel(lineStatus), 16) + " -> " +
+			routeToken(stateLabel(item.State), 16)
 	} else {
-		for index, status := range current.interfaces {
-			line := fmt.Sprintf("  %s | %s | 管理%s | 载波%s | 运行%s | IPv4 %s", status.Name, interfaceLinkLabel(&status), interfaceAdminLabel(status), interfaceCarrierLabel(status), interfaceOperStateLabel(status), interfaceIPv4Label(&status))
-			output.WriteString(clip(line, width))
-			if index+1 < len(current.interfaces) {
-				output.WriteByte('\n')
-			}
+		route = fmt.Sprintf("[%s] -> [%s] -> [%s] -> [%s]", displayName, interfaceName, interfaceLinkLabel(lineStatus), stateLabel(item.State))
+	}
+	marker := "  "
+	if selected {
+		marker = "▶ "
+	}
+	available := maxInt(0, width-runewidth.StringWidth(marker))
+	line := marker + clip(route, available)
+	line = pad(line, width)
+	return accountRouteStyle(item.State, selected).Render(line)
+}
+
+func routeToken(value string, width int) string {
+	if width < 2 {
+		return clip(value, width)
+	}
+	token := "[" + clip(value, width-2) + "]"
+	return pad(token, width)
+}
+
+func (current model) renderAccountDetail(item account.Snapshot, width int, selected bool) string {
+	accountConfig, exists := current.accountConfig(item.ID)
+	username := "-"
+	interfaceName := "未分配"
+	if exists {
+		if accountConfig.Username != "" {
+			username = accountConfig.Username
+		}
+		if accountConfig.NetworkInterface != "" {
+			interfaceName = accountConfig.NetworkInterface
 		}
 	}
-	return output.String()
+	lineStatus := current.interfaceStatus(interfaceName)
+	var detail string
+	if width >= 80 {
+		detail =
+			pad("用户 "+username, 18) +
+				pad("IPv4 "+interfaceIPv4Label(lineStatus), 16) +
+				pad(enabledLabel(item.Enabled), 6) +
+				pad("结果 "+resultLabel(item.LastResult), 11) +
+				pad("重试 "+fmt.Sprintf("%d", item.RetryCount), 9) +
+				"下次 " + nextAttemptLabel(item.NextAttemptAt)
+		if item.LastSuccessAt != nil {
+			detail += "  成功 " + successLabel(item.LastSuccessAt)
+		}
+		if item.LastError != "" {
+			detail += "  原因 " + item.LastError
+		}
+	} else {
+		detail = "用户: " + username + "  IPv4: " + interfaceIPv4Label(lineStatus) +
+			"  " + enabledLabel(item.Enabled) + "  结果: " + resultLabel(item.LastResult) +
+			"  重试: " + fmt.Sprintf("%d", item.RetryCount) +
+			"  下次: " + nextAttemptLabel(item.NextAttemptAt) +
+			"  上次成功: " + successLabel(item.LastSuccessAt)
+		if item.LastError != "" {
+			detail += "  原因: " + item.LastError
+		}
+	}
+	line := "  " + clip(detail, maxInt(0, width-2))
+	if selected {
+		return selectedDetailStyle.Render(pad(line, width))
+	}
+	return mutedStyle.Render(line)
+}
+
+func renderInterfaceHeader() string {
+	return "  " + pad("线路", 14) + pad("链路", 12) + pad("管理", 8) + pad("载波", 8) + pad("运行", 10) + "IPv4"
+}
+
+func renderInterfaceLine(status daemon.InterfaceStatus, index, width int) string {
+	var line string
+	if width >= 80 {
+		line = "  " +
+			pad(fmt.Sprintf("%d %s", index+1, status.Name), 14) +
+			pad(interfaceLinkLabel(&status), 12) +
+			pad(interfaceAdminLabel(status), 8) +
+			pad(interfaceCarrierLabel(status), 8) +
+			pad(interfaceOperStateLabel(status), 10) +
+			"IPv4 " + interfaceIPv4Label(&status)
+	} else {
+		line = fmt.Sprintf("%d. %s -> %s | 管理%s | 载波%s | 运行%s | IPv4 %s", index+1, status.Name, interfaceLinkLabel(&status), interfaceAdminLabel(status), interfaceCarrierLabel(status), interfaceOperStateLabel(status), interfaceIPv4Label(&status))
+	}
+	return interfaceStateStyle(status).Render(clip(line, width))
+}
+
+func renderEventLine(event eventlog.Event, width int) string {
+	return accountStateStyle(account.State(event.State)).Render(clip(renderEvent(event, width), width))
+}
+
+func fitViewLines(lines []string, height int) []string {
+	if height <= 0 || len(lines) <= height {
+		return lines
+	}
+	if height == 1 {
+		return []string{lines[len(lines)-1]}
+	}
+	result := append([]string(nil), lines[:height-2]...)
+	result = append(result, styledLine(mutedStyle, "...", 3))
+	result = append(result, lines[len(lines)-1])
+	return result
 }
 
 func (current model) accountConfig(id string) (daemon.AccountConfigView, bool) {
