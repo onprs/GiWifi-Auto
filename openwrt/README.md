@@ -16,50 +16,19 @@ wget -qO- https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/op
 
 ## 配置账号
 
-下面的命令配置默认账号，并将密码保存在独立的 UCI package 中：
+SSH 登录 OpenWrt 后直接运行：
 
 ```sh
-uci set 'giwifi-auto.main.portal_login_url=<Portal 登录接口地址>'
-uci set 'giwifi-auto.account_primary.username=<GiWiFi 账号>'
-uci set 'giwifi-auto.account_primary.credential_ref=uci:giwifi-credentials.account_primary.password'
-uci set 'giwifi-auto.account_primary.enabled=1'
-
-uci set 'giwifi-credentials.account_primary=credential'
-uci set 'giwifi-credentials.account_primary.password=<GiWiFi 密码>'
-
-uci commit giwifi-auto
-uci commit giwifi-credentials
-chmod 0600 /etc/config/giwifi-auto /etc/config/giwifi-credentials
+giwifi-auto
 ```
 
-配置支持三种凭据引用。UCI 账号 section 名称只能使用字母、数字和下划线，并与程序中的账号 ID 保持一致。每个账号可以使用独立的 `network_interface`，让探测和 Portal 登录请求从对应线路发出。
+TUI 中选择“添加账号”，填写 Portal 地址、账号 ID、显示名称、用户名、密码和绑定网卡。保存后账号会自动启用并开始认证；重复添加即可配置多个账号。编辑已有账号时，密码留空会保留原密码。
 
-- `uci:package.section.option`：读取 UCI 值，适合 OpenWrt
-- `file:/absolute/path`：读取权限受限的单行文件
-- `env:NAME`：读取服务进程环境变量
+密码保存在受限的 UCI 凭据配置中，不会显示在账号状态和事件日志里。
 
 ## 多账号与网络接口
 
-每条需要独立认证的上联都应先在 OpenWrt 中配置为独立网络接口，再为账号填写对应的 Linux 设备名。下面示例使用两条线路，设备名请按 `ip -br link` 的实际输出替换：
-
-```sh
-uci set 'giwifi-auto.account_primary.network_interface=eth1'
-uci set 'giwifi-auto.account_secondary=account'
-uci set 'giwifi-auto.account_secondary.display_name=第二条线路账号'
-uci set 'giwifi-auto.account_secondary.username=<第二个 GiWiFi 账号>'
-uci set 'giwifi-auto.account_secondary.credential_ref=uci:giwifi-credentials.account_secondary.password'
-uci set 'giwifi-auto.account_secondary.enabled=1'
-uci set 'giwifi-auto.account_secondary.priority=100'
-uci set 'giwifi-auto.account_secondary.network_interface=lan2'
-
-uci set 'giwifi-credentials.account_secondary=credential'
-uci set 'giwifi-credentials.account_secondary.password=<第二个 GiWiFi 密码>'
-uci commit giwifi-auto
-uci commit giwifi-credentials
-chmod 0600 /etc/config/giwifi-auto /etc/config/giwifi-credentials
-/usr/bin/giwifi-auto check --config /etc/config/giwifi-auto
-/etc/init.d/giwifi-auto reload
-```
+每条需要独立认证的上联都应先在 OpenWrt 中配置为独立网络接口，再在 TUI 的“网络接口”字段填写 `ip -br link` 显示的 Linux 设备名，例如 `eth1`、`lan2` 或 `eth1.101`。重复使用“添加账号”即可为不同线路配置不同账号。
 
 `GiWifi-Auto` 负责每条线路的 Portal 认证，线路之间的转发负载均衡由 OpenWrt 的 `mwan3` 负责。多 WAN 使用前安装并启用 `mwan3`：
 
@@ -70,13 +39,6 @@ opkg install mwan3
 ```
 
 将各上联网络加入防火墙的 `wan` zone，并在 `mwan3` 中为每条上联创建 interface/member，加入同一个 `balanced` policy，再将 IPv4 默认规则指向该 policy。启用策略路由时应关闭防火墙的 `flow_offloading` 和 `flow_offloading_hw`。
-
-配置完成后检查并重启：
-
-```sh
-/usr/bin/giwifi-auto check --config /etc/config/giwifi-auto
-/etc/init.d/giwifi-auto restart
-```
 
 ## 服务管理
 
@@ -98,7 +60,7 @@ opkg install mwan3
 /usr/bin/giwifi-auto status --config /etc/config/giwifi-auto --json
 /usr/bin/giwifi-auto logs --config /etc/config/giwifi-auto --limit 50
 /usr/bin/giwifi-auto logs --config /etc/config/giwifi-auto --follow
-/usr/bin/giwifi-auto tui --config /etc/config/giwifi-auto
+giwifi-auto
 ```
 
 ## 从源码部署

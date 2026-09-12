@@ -5,25 +5,56 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 
 	"github.com/onprs/GiWifi-Auto/internal/account"
 	"github.com/onprs/GiWifi-Auto/internal/control"
 )
 
 const (
-	MethodPing           = "ping"
-	MethodStatus         = "status"
-	MethodRecentLogs     = "logs.recent"
-	MethodWaitLogs       = "logs.wait"
-	MethodAccountTrigger = "account.trigger"
-	MethodAccountEnable  = "account.enable"
-	MethodAccountDisable = "account.disable"
-	MethodReload         = "reload"
+	MethodPing             = "ping"
+	MethodStatus           = "status"
+	MethodConfig           = "config"
+	MethodRecentLogs       = "logs.recent"
+	MethodWaitLogs         = "logs.wait"
+	MethodAccountTrigger   = "account.trigger"
+	MethodAccountEnable    = "account.enable"
+	MethodAccountDisable   = "account.disable"
+	MethodAccountConfigure = "account.configure"
+	MethodReload           = "reload"
 )
 
 // StatusResponse 是 status 方法的返回值。
 type StatusResponse struct {
 	Accounts []account.Snapshot `json:"accounts"`
+}
+
+// ConfigResponse 是 TUI 使用的非敏感配置视图。
+type ConfigResponse struct {
+	PortalLoginURL string              `json:"portal_login_url"`
+	Accounts       []AccountConfigView `json:"accounts"`
+}
+
+// AccountConfigView 是不包含凭据引用和密码的账号配置视图。
+type AccountConfigView struct {
+	ID               string `json:"id"`
+	DisplayName      string `json:"display_name"`
+	Username         string `json:"username"`
+	Enabled          bool   `json:"enabled"`
+	Priority         int    `json:"priority"`
+	NetworkInterface string `json:"network_interface"`
+	HasCredential    bool   `json:"has_credential"`
+}
+
+// AccountConfigureRequest 是 TUI 保存账号配置的请求。Password 只允许出现在请求中。
+type AccountConfigureRequest struct {
+	ID               string `json:"id"`
+	DisplayName      string `json:"display_name"`
+	Username         string `json:"username"`
+	Password         string `json:"password"`
+	PortalLoginURL   string `json:"portal_login_url"`
+	NetworkInterface string `json:"network_interface"`
+	Enabled          bool   `json:"enabled"`
 }
 
 // LogsRequest 是 logs.recent 方法的参数。
@@ -51,6 +82,8 @@ func (service *Service) Handle(ctx context.Context, request control.Request) (in
 		}{OK: true}, nil
 	case MethodStatus:
 		return StatusResponse{Accounts: service.Status()}, nil
+	case MethodConfig:
+		return service.configuration(), nil
 	case MethodRecentLogs:
 		var params LogsRequest
 		if rpcError := decodeParams(request, &params); rpcError != nil {
@@ -98,6 +131,15 @@ func (service *Service) Handle(ctx context.Context, request control.Request) (in
 		return service.setEnabledFromRequest(ctx, request, true)
 	case MethodAccountDisable:
 		return service.setEnabledFromRequest(ctx, request, false)
+	case MethodAccountConfigure:
+		var params AccountConfigureRequest
+		if rpcError := decodeParams(request, &params); rpcError != nil {
+			return nil, rpcError
+		}
+		if err := service.ConfigureAccount(ctx, params); err != nil {
+			return nil, &control.RPCError{Code: "account_configure_failed", Message: "账号配置未保存: " + err.Error()}
+		}
+		return struct{}{}, nil
 	case MethodReload:
 		if err := service.Reload(ctx); err != nil {
 			return nil, &control.RPCError{Code: "reload_failed", Message: "重载配置失败"}
@@ -123,6 +165,27 @@ func (service *Service) setEnabledFromRequest(ctx context.Context, request contr
 		return nil, &control.RPCError{Code: "account_update_failed", Message: "更新账号状态失败"}
 	}
 	return struct{}{}, nil
+}
+
+func (service *Service) configuration() ConfigResponse {
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	result := ConfigResponse{
+		PortalLoginURL: service.config.Runtime.PortalLoginURL,
+		Accounts:       make([]AccountConfigView, 0, len(service.config.Accounts)),
+	}
+	for _, accountConfig := range service.config.Accounts {
+		result.Accounts = append(result.Accounts, AccountConfigView{
+			ID:               accountConfig.ID,
+			DisplayName:      accountConfig.DisplayName,
+			Username:         accountConfig.Username,
+			Enabled:          accountConfig.Enabled,
+			Priority:         accountConfig.Priority,
+			NetworkInterface: accountConfig.NetworkInterface,
+			HasCredential:    strings.TrimSpace(accountConfig.CredentialRef) != "",
+		})
+	}
+	return result
 }
 
 func (service *Service) hasAccount(id string) bool {

@@ -2,11 +2,14 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/onprs/GiWifi-Auto/internal/credential"
 )
 
 func TestDefaultIsValid(t *testing.T) {
@@ -192,5 +195,40 @@ func TestConfigJSONRoundTripDoesNotAddSecrets(t *testing.T) {
 	}
 	if strings.Contains(string(data), `"password"`) {
 		t.Fatal("配置序列化不应出现 password 字段")
+	}
+}
+
+func TestSaveJSONAccountConfigurationStoresPasswordOutsideConfig(t *testing.T) {
+	path := t.TempDir() + "/config.json"
+	password := "tui-password"
+	credentialRef, err := CredentialReferenceForAccount(path, "new_account")
+	if err != nil {
+		t.Fatalf("CredentialReferenceForAccount() 失败: %v", err)
+	}
+	cfg := Default()
+	cfg.Runtime.PortalLoginURL = "http://portal.example.test/login"
+	cfg.Accounts = []AccountConfig{{
+		ID:            "new_account",
+		DisplayName:   "新账号",
+		Username:      "user@example.test",
+		CredentialRef: credentialRef,
+		Enabled:       true,
+	}}
+	if err := SaveAccountConfiguration(context.Background(), path, cfg, "new_account", password, true); err != nil {
+		t.Fatalf("SaveAccountConfiguration() 失败: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读取配置失败: %v", err)
+	}
+	if strings.Contains(string(data), password) {
+		t.Fatal("密码被写入配置文件")
+	}
+	resolved, err := (credential.DefaultResolver{}).Resolve(context.Background(), credentialRef)
+	if err != nil {
+		t.Fatalf("读取侧车凭据失败: %v", err)
+	}
+	if resolved != password {
+		t.Fatalf("侧车凭据 = %q, want %q", resolved, password)
 	}
 }

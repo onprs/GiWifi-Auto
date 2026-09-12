@@ -27,26 +27,15 @@ wget -qO- https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/op
 
 ## 配置
 
-在 OpenWrt 上设置 Portal 登录地址、账号和凭据引用：
+SSH 登录 OpenWrt 后直接运行：
 
 ```sh
-uci set 'giwifi-auto.main.portal_login_url=<Portal 登录接口地址>'
-uci set 'giwifi-auto.account_primary.username=<GiWiFi 账号>'
-uci set 'giwifi-auto.account_primary.credential_ref=uci:giwifi-credentials.account_primary.password'
-uci set 'giwifi-auto.account_primary.enabled=1'
-uci set 'giwifi-auto.account_primary.network_interface=<Linux 网卡名>'
-
-uci set 'giwifi-credentials.account_primary=credential'
-uci set 'giwifi-credentials.account_primary.password=<GiWiFi 密码>'
-
-uci commit giwifi-auto
-uci commit giwifi-credentials
-chmod 0600 /etc/config/giwifi-auto /etc/config/giwifi-credentials
-/usr/bin/giwifi-auto check --config /etc/config/giwifi-auto
-/etc/init.d/giwifi-auto restart
+giwifi-auto
 ```
 
-配置中只保存 `env:`、`file:` 或 `uci:` 凭据引用。`network_interface` 填 OpenWrt `ip -br link` 显示的 Linux 设备名，例如 `eth1`、`lan2` 或 `eth1.101`，不要填写 UCI 的逻辑接口名。完整字段示例见 [openwrt/config.example](./openwrt/config.example)。
+TUI 中使用“添加账号”配置 Portal 地址、账号 ID、显示名称、用户名、密码和绑定网卡。保存账号后会自动启用账号并开始认证；再次添加账号即可配置多条线路和多个账号。编辑已有账号时，密码留空会保留原密码。
+
+`network_interface` 填 OpenWrt `ip -br link` 显示的 Linux 设备名，例如 `eth1`、`lan2` 或 `eth1.101`。密码保存在受限的 UCI 凭据配置中，不会显示在账号状态和事件日志里。
 
 ## 使用
 
@@ -74,6 +63,12 @@ chmod 0600 /etc/config/giwifi-auto /etc/config/giwifi-credentials
 ```
 
 启动终端界面：
+
+```sh
+giwifi-auto
+```
+
+也可以显式指定配置路径：
 
 ```sh
 /usr/bin/giwifi-auto tui --config /etc/config/giwifi-auto

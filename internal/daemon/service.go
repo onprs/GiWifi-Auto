@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -222,6 +223,95 @@ func (service *Service) SetEnabled(ctx context.Context, id string, enabled bool)
 	}
 	service.config = candidate
 	runner.SetEnabled(enabled)
+	return nil
+}
+
+// ConfigureAccount 保存账号配置，成功后替换运行器并立即开始新的账号循环。
+func (service *Service) ConfigureAccount(ctx context.Context, request AccountConfigureRequest) error {
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	if ctx == nil {
+		return errors.New("账号配置上下文不能为空")
+	}
+	if strings.TrimSpace(request.ID) == "" {
+		return errors.New("账号 ID 不能为空")
+	}
+
+	service.mu.RLock()
+	path := service.configPath
+	current := service.config
+	started := service.started
+	rootContext := service.rootCtx
+	service.mu.RUnlock()
+	candidate := current
+	candidate.Runtime.PortalLoginURL = request.PortalLoginURL
+	candidate.Accounts = append([]config.AccountConfig(nil), current.Accounts...)
+	accountConfig := config.AccountConfig{
+		ID:               request.ID,
+		DisplayName:      request.DisplayName,
+		Username:         request.Username,
+		Enabled:          request.Enabled,
+		Priority:         100,
+		NetworkInterface: request.NetworkInterface,
+	}
+	accountIndex := -1
+	for index, existing := range candidate.Accounts {
+		if existing.ID == request.ID {
+			accountIndex = index
+			accountConfig.Priority = existing.Priority
+			accountConfig.CredentialRef = existing.CredentialRef
+			break
+		}
+	}
+	passwordProvided := request.Password != ""
+	if passwordProvided {
+		credentialRef, err := config.CredentialReferenceForAccount(path, request.ID)
+		if err != nil {
+			return err
+		}
+		accountConfig.CredentialRef = credentialRef
+	}
+	if accountIndex >= 0 {
+		candidate.Accounts[accountIndex] = accountConfig
+	} else {
+		candidate.Accounts = append(candidate.Accounts, accountConfig)
+	}
+	if err := candidate.Validate(); err != nil {
+		return err
+	}
+
+	newLimiter := newRequestLimiter(candidate.Runtime.MaxConcurrentRequests)
+	newRunners, newOrder, err := service.buildRunners(candidate, newLimiter)
+	if err != nil {
+		return err
+	}
+	if err := config.SaveAccountConfiguration(ctx, path, candidate, request.ID, request.Password, passwordProvided); err != nil {
+		return err
+	}
+
+	service.mu.Lock()
+	oldCancel := service.runCancel
+	service.runCancel = nil
+	service.started = false
+	service.mu.Unlock()
+	if oldCancel != nil {
+		oldCancel()
+	}
+	service.wg.Wait()
+
+	if err := service.events.Resize(candidate.Runtime.EventBufferSize); err != nil {
+		return fmt.Errorf("调整事件缓冲区失败: %w", err)
+	}
+	service.mu.Lock()
+	service.config = candidate
+	service.limiter = newLimiter
+	service.runners = newRunners
+	service.order = newOrder
+	if started && rootContext != nil && rootContext.Err() == nil {
+		service.rootCtx = rootContext
+		service.runContextLocked()
+	}
+	service.mu.Unlock()
 	return nil
 }
 

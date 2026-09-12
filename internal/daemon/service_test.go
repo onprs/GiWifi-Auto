@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -138,6 +139,62 @@ func TestServiceLimitsConcurrentNetworkRequests(t *testing.T) {
 	service.Stop()
 	if got := maximum.Load(); got > 1 {
 		t.Fatalf("最大网络请求并发数 = %d, want <= 1", got)
+	}
+}
+
+func TestServiceConfigureAccountPersistsAccountAndPassword(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	cfg := config.Default()
+	cfg.Runtime.PortalLoginURL = "http://portal.example.test/login"
+	if err := config.SaveFileAtomic(path, cfg); err != nil {
+		t.Fatalf("写入初始配置失败: %v", err)
+	}
+	service, err := New(cfg, path, Dependencies{})
+	if err != nil {
+		t.Fatalf("New() 失败: %v", err)
+	}
+	request := AccountConfigureRequest{
+		ID:             "configured_account",
+		DisplayName:    "配置账号",
+		Username:       "user@example.test",
+		Password:       "tui-password",
+		PortalLoginURL: cfg.Runtime.PortalLoginURL,
+		Enabled:        true,
+	}
+	if err := service.ConfigureAccount(context.Background(), request); err != nil {
+		t.Fatalf("ConfigureAccount() 失败: %v", err)
+	}
+	loaded, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatalf("读取保存配置失败: %v", err)
+	}
+	if len(loaded.Accounts) != 1 || loaded.Accounts[0].ID != request.ID || !loaded.Accounts[0].Enabled {
+		t.Fatalf("保存的账号 = %+v", loaded.Accounts)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读取配置文件失败: %v", err)
+	}
+	if strings.Contains(string(data), request.Password) {
+		t.Fatal("密码被写入 JSON 配置")
+	}
+	credentialRef := loaded.Accounts[0].CredentialRef
+	if !strings.HasPrefix(credentialRef, "file:") {
+		t.Fatalf("凭据引用 = %q, want file 引用", credentialRef)
+	}
+	credentialData, err := os.ReadFile(strings.TrimPrefix(credentialRef, "file:"))
+	if err != nil {
+		t.Fatalf("读取凭据文件失败: %v", err)
+	}
+	if strings.TrimSpace(string(credentialData)) != request.Password {
+		t.Fatalf("凭据文件内容不正确: %q", credentialData)
+	}
+	statusJSON, err := json.Marshal(service.configuration())
+	if err != nil {
+		t.Fatalf("序列化配置视图失败: %v", err)
+	}
+	if strings.Contains(string(statusJSON), request.Password) {
+		t.Fatal("配置视图泄露密码")
 	}
 }
 

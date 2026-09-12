@@ -69,6 +69,35 @@ func TestUpdateKeepsSelectionWithinAccountRange(t *testing.T) {
 	}
 }
 
+func TestUpdateOpensAccountConfigurationForm(t *testing.T) {
+	current := model{
+		accounts: []account.Snapshot{{ID: "primary"}},
+		configuration: daemon.ConfigResponse{Accounts: []daemon.AccountConfigView{{
+			ID:          "primary",
+			DisplayName: "主账号",
+			Username:    "user@example.test",
+		}}},
+	}
+	updated, _ := current.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	current = updated.(model)
+	if current.form == nil || !current.form.editing || current.form.value(formAccountID) != "primary" {
+		t.Fatalf("配置表单 = %+v", current.form)
+	}
+}
+
+func TestAccountFormMasksPassword(t *testing.T) {
+	form := newAccountForm(daemon.ConfigResponse{}, nil)
+	form.fields[formPassword].value = "secret-password"
+	form.fields[formPassword].cursor = len([]rune(form.fields[formPassword].value))
+	view := (model{width: 80, form: form}).View()
+	if strings.Contains(view, "secret-password") {
+		t.Fatal("TUI 视图泄露密码")
+	}
+	if !strings.Contains(view, "**************") {
+		t.Fatalf("TUI 视图未显示密码掩码: %q", view)
+	}
+}
+
 func TestUpdateLoadsStatusAndClampsSelection(t *testing.T) {
 	current := model{selected: 3}
 	updated, _ := current.Update(statusMessage{result: daemon.StatusResponse{Accounts: []account.Snapshot{{ID: "only"}}}})

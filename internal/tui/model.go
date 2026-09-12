@@ -38,21 +38,32 @@ type actionMessage struct {
 	err error
 }
 
+type configMessage struct {
+	result daemon.ConfigResponse
+	err    error
+}
+
+type configureMessage struct {
+	err error
+}
+
 type refreshMessage struct{}
 
 type model struct {
-	ctx      context.Context
-	address  string
-	accounts []account.Snapshot
-	events   []eventlog.Event
-	selected int
-	width    int
-	height   int
-	loading  bool
-	err      string
-	showHelp bool
-	paused   bool
-	filterID string
+	ctx           context.Context
+	address       string
+	accounts      []account.Snapshot
+	events        []eventlog.Event
+	selected      int
+	width         int
+	height        int
+	loading       bool
+	err           string
+	showHelp      bool
+	paused        bool
+	filterID      string
+	configuration daemon.ConfigResponse
+	form          *accountForm
 }
 
 // NewModel 创建一个只通过本地控制协议工作的 TUI 模型。
@@ -80,12 +91,15 @@ func Run(ctx context.Context, address string, input io.Reader, output io.Writer)
 }
 
 func (current model) Init() tea.Cmd {
-	return tea.Batch(fetchStatus(current.ctx, current.address), fetchLogs(current.ctx, current.address), tick())
+	return tea.Batch(fetchStatus(current.ctx, current.address), fetchConfiguration(current.ctx, current.address), fetchLogs(current.ctx, current.address), tick())
 }
 
 func (current model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
+		if current.form != nil {
+			return current.updateForm(message)
+		}
 		switch message.String() {
 		case "ctrl+c", "q":
 			return current, tea.Quit
@@ -99,6 +113,10 @@ func (current model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			return current, current.triggerSelected()
+		case "a":
+			current.openNewAccountForm()
+		case "c":
+			current.openSelectedAccountForm()
 		case "l":
 			return current, callAction(current.ctx, current.address, daemon.MethodReload, struct{}{})
 		case "e":
@@ -112,7 +130,7 @@ func (current model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			current.showHelp = !current.showHelp
 		case " ":
 			current.paused = !current.paused
-		case "c":
+		case "x":
 			current.events = nil
 		case "f":
 			if current.selected >= 0 && current.selected < len(current.accounts) {
@@ -127,6 +145,27 @@ func (current model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		current.width = message.Width
 		current.height = message.Height
+	case configMessage:
+		if message.err != nil {
+			current.err = "配置暂时不可用"
+		} else {
+			current.configuration = message.result
+			if current.err == "配置暂时不可用" {
+				current.err = ""
+			}
+		}
+	case configureMessage:
+		if current.form == nil {
+			return current, nil
+		}
+		current.form.saving = false
+		if message.err != nil {
+			current.form.err = "保存失败: " + message.err.Error()
+			return current, nil
+		}
+		current.form = nil
+		current.loading = true
+		return current, current.refresh()
 	case statusMessage:
 		current.loading = false
 		if message.err != nil {
@@ -156,12 +195,15 @@ func (current model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return current, current.refresh()
 	case refreshMessage:
-		return current, tea.Batch(fetchStatus(current.ctx, current.address), fetchLogs(current.ctx, current.address), tick())
+		return current, tea.Batch(fetchStatus(current.ctx, current.address), fetchConfiguration(current.ctx, current.address), fetchLogs(current.ctx, current.address), tick())
 	}
 	return current, nil
 }
 
 func (current model) View() string {
+	if current.form != nil {
+		return current.formView()
+	}
 	width, height := current.width, current.height
 	if width <= 0 {
 		width = 80
@@ -254,12 +296,14 @@ func (current model) View() string {
 		for _, line := range []string{
 			"q 退出",
 			"j/k 选择账号",
+			"a 添加账号",
+			"c 配置当前账号",
 			"Enter 立即检查",
 			"e 启用",
 			"d 停用",
 			"l 重载配置",
 			"Space 暂停/继续日志",
-			"c 清空日志视图",
+			"x 清空日志视图",
 			"f 筛选当前账号",
 			"r 刷新",
 			"? 返回",
@@ -306,7 +350,7 @@ func (current model) filteredEvents() []eventlog.Event {
 }
 
 func (current model) refresh() tea.Cmd {
-	return tea.Batch(fetchStatus(current.ctx, current.address), fetchLogs(current.ctx, current.address), tick())
+	return tea.Batch(fetchStatus(current.ctx, current.address), fetchConfiguration(current.ctx, current.address), fetchLogs(current.ctx, current.address), tick())
 }
 
 func (current model) triggerSelected() tea.Cmd {

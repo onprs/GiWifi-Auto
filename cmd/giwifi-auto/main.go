@@ -23,6 +23,8 @@ import (
 
 var version = "dev"
 
+const defaultOpenWrtConfigPath = "/etc/config/giwifi-auto"
+
 type checkResult struct {
 	Valid               bool   `json:"valid"`
 	Version             int    `json:"version"`
@@ -44,8 +46,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		printUsage(stdout)
-		return 0
+		return runTUI([]string{"--config", defaultOpenWrtConfigPath}, stdout, stderr)
 	}
 
 	switch args[0] {
@@ -631,7 +632,8 @@ func writeJSON(stdout io.Writer, value interface{}, stderr io.Writer) error {
 }
 
 func printUsage(output io.Writer) {
-	fmt.Fprintln(output, "用法: giwifi-auto <命令> [选项]")
+	fmt.Fprintln(output, "用法: giwifi-auto [命令] [选项]")
+	fmt.Fprintln(output, "不带命令时直接打开终端管理界面")
 	fmt.Fprintln(output, "命令:")
 	fmt.Fprintln(output, "  check    校验 JSON 配置")
 	fmt.Fprintln(output, "  probe    探测网络连通性")
