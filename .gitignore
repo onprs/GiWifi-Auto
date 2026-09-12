@@ -29,6 +29,9 @@ config.local.json
 __pycache__/
 *.pyc
 
+# Local agent instructions
+/AGENTS.md
+
 # Editor and OS files
 .vscode/
 .idea/
