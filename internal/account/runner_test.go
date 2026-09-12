@@ -94,6 +94,37 @@ func TestRunnerBacksOffAfterRejectedAuthentication(t *testing.T) {
 	}
 }
 
+func TestRunnerBacksOffAfterNetworkAuthenticationFailure(t *testing.T) {
+	portalURL, _ := url.Parse("http://portal.example.test/login")
+	probe := &sequenceProbe{results: []probeResult{{result: connectivity.Result{Status: connectivity.StatusPortal, RedirectURL: portalURL}}}}
+	runner, err := New(testRunnerConfig(true), Dependencies{
+		Probe:         probe,
+		Authenticator: &recordingAuthenticator{err: categorizedError{category: string(portal.CategoryNetwork)}},
+		Credentials:   &testResolver{value: "synthetic-password"},
+		Jitter:        func(time.Duration) time.Duration { return 0 },
+	})
+	if err != nil {
+		t.Fatalf("New() 失败: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		runner.Run(ctx)
+		close(done)
+	}()
+	waitForState(t, runner, StateBackoff)
+	cancel()
+	waitForDone(t, done)
+
+	snapshot := runner.Snapshot()
+	if snapshot.RetryCount != 1 || snapshot.ErrorCategory != string(portal.CategoryNetwork) {
+		t.Fatalf("认证网络错误退避状态摘要 = %+v", snapshot)
+	}
+	if snapshot.LastError != "等待认证网络恢复" {
+		t.Fatalf("认证网络错误摘要 = %q", snapshot.LastError)
+	}
+}
 func TestRunnerWaitsForTriggerAfterNonRetryableError(t *testing.T) {
 	probe := &sequenceProbe{results: []probeResult{{err: categorizedError{category: string(connectivity.CategoryProtocol)}}}}
 	runner, err := New(testRunnerConfig(true), Dependencies{

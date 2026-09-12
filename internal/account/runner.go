@@ -325,6 +325,10 @@ func (r *Runner) authenticate(ctx context.Context, result connectivity.Result) (
 		if category == string(portal.CategoryAuthentication) {
 			return r.scheduleBackoff(category, "认证未被接受")
 		}
+		if category == string(portal.CategoryNetwork) {
+			r.emit(StateOffline, "authenticate", category, "认证网络暂时不可达", nil)
+			return r.scheduleBackoff(category, "等待认证网络恢复")
+		}
 		r.emit(StateError, "authenticate", category, "认证请求失败，需要检查配置或协议", nil)
 		return 0, true
 	}
