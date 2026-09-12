@@ -288,15 +288,9 @@ func (current model) formView() string {
 		output.WriteByte('\n')
 	}
 	output.WriteByte('\n')
-	for _, line := range []string{
-		"Tab/上下 选择字段",
-		"Enter 下一项/保存",
-		"Ctrl+S 保存",
-		"Esc 取消",
-	} {
-		output.WriteString(styledLine(keyStyle, line, width))
-		output.WriteByte('\n')
-	}
+	output.WriteString(styledLine(mutedStyle, "点击字段后输入用户名和密码", width))
+	output.WriteByte('\n')
+	output.WriteString(renderMouseButtons(formMouseButtons(), width, ""))
 	return strings.TrimSuffix(output.String(), "\n")
 }
 

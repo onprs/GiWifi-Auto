@@ -67,6 +67,7 @@ type model struct {
 	form          *accountForm
 	confirmDelete bool
 	deleteID      string
+	hoverAction   string
 }
 
 // NewModel 创建一个只通过本地控制协议工作的 TUI 模型。
@@ -85,6 +86,7 @@ func Run(ctx context.Context, address string, input io.Reader, output io.Writer)
 		tea.WithInput(input),
 		tea.WithOutput(output),
 		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 	)
 	_, err := program.Run()
 	if errors.Is(err, tea.ErrProgramKilled) && ctx != nil && ctx.Err() != nil {
@@ -99,6 +101,8 @@ func (current model) Init() tea.Cmd {
 
 func (current model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
+	case tea.MouseMsg:
+		return current.updateMouse(message)
 	case tea.KeyMsg:
 		if current.form != nil {
 			return current.updateForm(message)
@@ -261,7 +265,7 @@ func (current model) View() string {
 	add("")
 	add(sectionHeading("账号与线路", width))
 	if len(current.accounts) == 0 {
-		add(styledLine(mutedStyle, "暂无账号，按 a 添加账号", width))
+		add(styledLine(mutedStyle, "暂无账号，点击底部新增按钮添加账号", width))
 	} else {
 		accountLimit := len(current.accounts)
 		if height < 30 {
@@ -301,17 +305,10 @@ func (current model) View() string {
 		add("")
 		add(sectionHeading("操作", width))
 		for _, line := range []string{
-			"q 退出",
-			"↑/↓ 或 j/k 选择账号",
-			"a 添加账号（只填用户名和密码）",
-			"c 编辑当前账号",
-			"Enter 立即检查",
-			"e 启用，d 停用",
-			"D/Delete 删除当前账号（需确认）",
-			"l 重载配置",
-			"Space 暂停/继续日志，x 清空日志视图",
-			"f 筛选当前账号，r 刷新",
-			"? 返回状态面板",
+			"点击账号行选择账号",
+			"点击底部按钮执行操作",
+			"滚轮切换账号",
+			"点击帮助按钮返回面板",
 		} {
 			add(styledLine(mutedStyle, line, width))
 		}
@@ -334,11 +331,7 @@ func (current model) View() string {
 	}
 
 	add("")
-	if current.confirmDelete {
-		add(styledLine(badStyle, "删除确认: "+current.deleteID+"  y 确认 / n 取消", width))
-	} else {
-		add(styledLine(footerStyle, "↑↓选择  a添加  c编辑  Enter检测  e启用  d停用  D删除  r刷新  ?帮助  q退出", width))
-	}
+	add(renderMouseButtons(mainMouseButtons(current.confirmDelete), width, current.hoverAction))
 	return strings.Join(fitViewLines(lines, height), "\n")
 }
 

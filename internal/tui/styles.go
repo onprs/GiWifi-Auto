@@ -36,15 +36,22 @@ var (
 			Foreground(lipgloss.Color("#FB7185"))
 	infoStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#38BDF8"))
-	keyStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FCD34D"))
 	fieldStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#E2E8F0"))
 	separatorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#475569"))
-	footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#CBD5E1"))
+	buttonStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#0F172A")).
+			Background(lipgloss.Color("#CBD5E1"))
+	buttonHoverStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#F8FAFC")).
+				Background(lipgloss.Color("#0284C7"))
+	dangerButtonStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FFF1F2")).
+				Background(lipgloss.Color("#BE123C"))
 )
 
 func styledLine(style lipgloss.Style, value string, width int) string {

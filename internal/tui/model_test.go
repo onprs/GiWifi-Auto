@@ -148,7 +148,7 @@ func TestViewShowsAccountInterfaceAndLineStatus(t *testing.T) {
 		height: 30,
 	}
 	view := current.View()
-	for _, value := range []string{"账号与线路", "[主账号]", "eth1", "线路状态", "192.0.2.10", "Enter检测", "D删除"} {
+	for _, value := range []string{"账号与线路", "[主账号]", "eth1", "线路状态", "192.0.2.10", "[检测]", "[删除]"} {
 		if !strings.Contains(view, value) {
 			t.Fatalf("界面缺少 %q: %q", value, view)
 		}
@@ -158,6 +158,80 @@ func TestViewShowsAccountInterfaceAndLineStatus(t *testing.T) {
 	}
 }
 
+func TestMouseSelectsAccountRow(t *testing.T) {
+	current := model{
+		accounts: []account.Snapshot{{ID: "one"}, {ID: "two"}},
+		width:    100,
+		height:   30,
+	}
+	secondRowY := current.accountAtMouseY(7)
+	if secondRowY != 1 {
+		t.Fatalf("第二个账号行坐标未计算正确: %d", secondRowY)
+	}
+	updated, command := current.Update(tea.MouseMsg{X: 4, Y: 7, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	current = updated.(model)
+	if command != nil || current.selected != 1 {
+		t.Fatalf("鼠标选择 = %d, command=%v", current.selected, command)
+	}
+}
+
+func TestMouseActionButtonOpensAccountForm(t *testing.T) {
+	current := model{width: 100, height: 30}
+	actionY := outputLineCount(current.View()) - 1
+	rect := mouseButtonRects(mainMouseButtons(false), current.width, actionY)[0]
+	updated, command := current.Update(tea.MouseMsg{X: rect.X + 1, Y: actionY, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	current = updated.(model)
+	if command != nil || current.form == nil || current.form.editing {
+		t.Fatalf("鼠标新增账号 = form=%+v command=%v", current.form, command)
+	}
+}
+
+func TestMouseDeleteConfirmationUsesButtons(t *testing.T) {
+	current := model{
+		accounts: []account.Snapshot{{ID: "primary"}},
+		width:    100,
+		height:   30,
+	}
+	deleteY := outputLineCount(current.View()) - 1
+	deleteRects := mouseButtonRects(mainMouseButtons(false), current.width, deleteY)
+	var deleteRect mouseButtonRect
+	for _, rect := range deleteRects {
+		if rect.ID == "delete" {
+			deleteRect = rect
+		}
+	}
+	updated, command := current.Update(tea.MouseMsg{X: deleteRect.X + 1, Y: deleteY, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	current = updated.(model)
+	if command != nil || !current.confirmDelete || current.deleteID != "primary" {
+		t.Fatalf("鼠标删除确认 = %+v command=%v", current, command)
+	}
+	confirmY := outputLineCount(current.View()) - 1
+	confirmRects := mouseButtonRects(mainMouseButtons(true), current.width, confirmY)
+	updated, command = current.Update(tea.MouseMsg{X: confirmRects[0].X + 1, Y: confirmY, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	current = updated.(model)
+	if command == nil || current.confirmDelete {
+		t.Fatalf("鼠标确认删除 = confirm=%v command=%v", current.confirmDelete, command)
+	}
+}
+
+func TestMouseFormFocusesFieldAndSaves(t *testing.T) {
+	form := newAccountForm(daemon.ConfigResponse{}, nil)
+	form.fields[formUsername].value = "user@example.test"
+	form.fields[formPassword].value = "password"
+	current := model{width: 80, height: 20, form: form}
+	updated, command := current.Update(tea.MouseMsg{X: 2, Y: 3, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	current = updated.(model)
+	if command != nil || current.form.active != formPassword {
+		t.Fatalf("鼠标聚焦密码字段 = %d command=%v", current.form.active, command)
+	}
+	buttonY := outputLineCount(current.formView()) - 1
+	rects := mouseButtonRects(formMouseButtons(), current.width, buttonY)
+	updated, command = current.Update(tea.MouseMsg{X: rects[0].X + 1, Y: buttonY, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	current = updated.(model)
+	if command == nil || !current.form.saving {
+		t.Fatalf("鼠标保存 = saving=%v command=%v", current.form.saving, command)
+	}
+}
 func TestUpdateLoadsStatusAndClampsSelection(t *testing.T) {
 	current := model{selected: 3}
 	updated, _ := current.Update(statusMessage{result: daemon.StatusResponse{Accounts: []account.Snapshot{{ID: "only"}}}})
