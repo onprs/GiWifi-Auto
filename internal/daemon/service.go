@@ -271,6 +271,10 @@ func (service *Service) buildRunners(cfg config.Config, limiter *requestLimiter)
 		if transport == nil {
 			return nil, nil, fmt.Errorf("为账号 %q 创建 HTTP Transport 失败", accountConfig.ID)
 		}
+		transport, err = bindAccountTransport(transport, accountConfig.NetworkInterface)
+		if err != nil {
+			return nil, nil, fmt.Errorf("为账号 %q 绑定网络接口失败: %w", accountConfig.ID, err)
+		}
 
 		probe := connectivity.New()
 		probe.Transport = transport

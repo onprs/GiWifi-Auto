@@ -7,6 +7,7 @@
 - 自动检测联网状态并完成 Portal 认证
 - 认证失败自动退避重试，认证成功后再次检查网络
 - 多账号独立启用、停用和手动触发
+- 多账号可分别绑定 OpenWrt 网络接口进行认证
 - 命令行、JSON 输出与终端界面
 - 近期事件查询和实时日志跟随
 - Portal 设备绑定确认
@@ -33,6 +34,7 @@ uci set 'giwifi-auto.main.portal_login_url=<Portal 登录接口地址>'
 uci set 'giwifi-auto.account_primary.username=<GiWiFi 账号>'
 uci set 'giwifi-auto.account_primary.credential_ref=uci:giwifi-credentials.account_primary.password'
 uci set 'giwifi-auto.account_primary.enabled=1'
+uci set 'giwifi-auto.account_primary.network_interface=<Linux 网卡名>'
 
 uci set 'giwifi-credentials.account_primary=credential'
 uci set 'giwifi-credentials.account_primary.password=<GiWiFi 密码>'
@@ -44,7 +46,7 @@ chmod 0600 /etc/config/giwifi-auto /etc/config/giwifi-credentials
 /etc/init.d/giwifi-auto restart
 ```
 
-配置中只保存 `env:`、`file:` 或 `uci:` 凭据引用。完整字段示例见 [openwrt/config.example](./openwrt/config.example)。
+配置中只保存 `env:`、`file:` 或 `uci:` 凭据引用。`network_interface` 填 OpenWrt `ip -br link` 显示的 Linux 设备名，例如 `eth1`、`lan2` 或 `eth1.101`，不要填写 UCI 的逻辑接口名。完整字段示例见 [openwrt/config.example](./openwrt/config.example)。
 
 ## 使用
 
