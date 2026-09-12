@@ -547,7 +547,11 @@ func (service *Service) publish(event account.Event) {
 
 func defaultTransport() http.RoundTripper {
 	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
-		return transport.Clone()
+		cloned := transport.Clone()
+		// 绑定账号网卡时需要由 bindHTTPTransportToInterface 安装带 SO_BINDTODEVICE 的拨号器。
+		cloned.DialContext = nil
+		cloned.DialTLSContext = nil
+		return cloned
 	}
 	return http.DefaultTransport
 }
