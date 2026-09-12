@@ -12,7 +12,7 @@ cleanup() {
 	status=$?
 	trap - 0 1 2 15
 	if [ -n "$REMOTE_DIRECTORY" ]; then
-		ssh -- "$DEPLOY_HOST" "rm -rf '$REMOTE_DIRECTORY'" >/dev/null 2>&1 || true
+		ssh -n -- "$DEPLOY_HOST" "rm -rf '$REMOTE_DIRECTORY'" >/dev/null 2>&1 || true
 	fi
 	if [ -n "$LOCAL_DIRECTORY" ]; then
 		rm -rf "$LOCAL_DIRECTORY"
@@ -29,7 +29,7 @@ for required_command in curl ssh scp mktemp sha256sum; do
 done
 
 printf '读取 %s 的设备架构...\n' "$DEPLOY_HOST"
-MACHINE=$(ssh -- "$DEPLOY_HOST" uname -m)
+MACHINE=$(ssh -n -- "$DEPLOY_HOST" uname -m)
 case "$MACHINE" in
 	x86_64 | amd64)
 		TARGET_ARCH=amd64
@@ -41,7 +41,7 @@ case "$MACHINE" in
 		TARGET_ARCH=mipsle
 		;;
 	mips)
-		PACKAGE_ARCHITECTURES=$(ssh -- "$DEPLOY_HOST" "if command -v opkg >/dev/null 2>&1; then opkg print-architecture; fi")
+		PACKAGE_ARCHITECTURES=$(ssh -n -- "$DEPLOY_HOST" "if command -v opkg >/dev/null 2>&1; then opkg print-architecture; fi")
 		case "$PACKAGE_ARCHITECTURES" in
 			*mipsel*) TARGET_ARCH=mipsle ;;
 			*)
@@ -92,7 +92,7 @@ if [ -z "$EXPECTED_CHECKSUM" ] || [ "$EXPECTED_CHECKSUM" != "$ACTUAL_CHECKSUM" ]
 	exit 1
 fi
 
-REMOTE_DIRECTORY=$(ssh -- "$DEPLOY_HOST" 'mktemp -d /tmp/giwifi-auto-deploy.XXXXXX')
+REMOTE_DIRECTORY=$(ssh -n -- "$DEPLOY_HOST" 'mktemp -d /tmp/giwifi-auto-deploy.XXXXXX')
 case "$REMOTE_DIRECTORY" in
 	/tmp/giwifi-auto-deploy.*) ;;
 	*)
@@ -103,7 +103,7 @@ esac
 
 printf '安装到 %s...\n' "$DEPLOY_HOST"
 scp -O -r "$BINARY_PATH" "$PACKAGE_DIRECTORY" "$DEPLOY_HOST:$REMOTE_DIRECTORY/"
-ssh -- "$DEPLOY_HOST" "set -eu
+ssh -n -- "$DEPLOY_HOST" "set -eu
 sh '$REMOTE_DIRECTORY/openwrt/install.sh' '$REMOTE_DIRECTORY/$BINARY_NAME'
 if /etc/init.d/giwifi-auto running >/dev/null 2>&1; then
 	/etc/init.d/giwifi-auto restart
