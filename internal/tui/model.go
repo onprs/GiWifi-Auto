@@ -423,11 +423,11 @@ func (current model) renderAccountDetail(item account.Snapshot, width int, selec
 	var detail string
 	if width >= 80 {
 		detail =
-			pad("用户 "+username, 18) +
-				pad("IPv4 "+interfaceIPv4Label(lineStatus), 16) +
-				pad(enabledLabel(item.Enabled), 6) +
-				pad("结果 "+resultLabel(item.LastResult), 11) +
-				pad("重试 "+fmt.Sprintf("%d", item.RetryCount), 9) +
+			pad("用户 "+username, 17) + "│" +
+				pad("IPv4 "+interfaceIPv4Label(lineStatus), 15) + "│" +
+				pad(enabledLabel(item.Enabled), 6) + "│" +
+				pad("结果 "+resultLabel(item.LastResult), 10) + "│" +
+				pad("重试 "+fmt.Sprintf("%d", item.RetryCount), 8) + "│" +
 				"下次 " + nextAttemptLabel(item.NextAttemptAt)
 		if item.LastSuccessAt != nil {
 			detail += "  成功 " + successLabel(item.LastSuccessAt)
@@ -453,18 +453,18 @@ func (current model) renderAccountDetail(item account.Snapshot, width int, selec
 }
 
 func renderInterfaceHeader() string {
-	return "  " + pad("线路", 14) + pad("链路", 12) + pad("管理", 8) + pad("载波", 8) + pad("运行", 10) + "IPv4"
+	return "  " + pad("线路", 14) + "│" + pad("链路", 12) + "│" + pad("管理", 8) + "│" + pad("载波", 8) + "│" + pad("运行", 10) + "│IPv4"
 }
 
 func renderInterfaceLine(status daemon.InterfaceStatus, index, width int) string {
 	var line string
 	if width >= 80 {
 		line = "  " +
-			pad(fmt.Sprintf("%d %s", index+1, status.Name), 14) +
-			pad(interfaceLinkLabel(&status), 12) +
-			pad(interfaceAdminLabel(status), 8) +
-			pad(interfaceCarrierLabel(status), 8) +
-			pad(interfaceOperStateLabel(status), 10) +
+			pad(fmt.Sprintf("%d %s", index+1, status.Name), 14) + "│" +
+			pad(interfaceLinkLabel(&status), 12) + "│" +
+			pad(interfaceAdminLabel(status), 8) + "│" +
+			pad(interfaceCarrierLabel(status), 8) + "│" +
+			pad(interfaceOperStateLabel(status), 10) + "│" +
 			"IPv4 " + interfaceIPv4Label(&status)
 	} else {
 		line = fmt.Sprintf("%d. %s -> %s | 管理%s | 载波%s | 运行%s | IPv4 %s", index+1, status.Name, interfaceLinkLabel(&status), interfaceAdminLabel(status), interfaceCarrierLabel(status), interfaceOperStateLabel(status), interfaceIPv4Label(&status))
