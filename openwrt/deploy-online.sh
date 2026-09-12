@@ -4,7 +4,7 @@ set -eu
 DEPLOY_HOST=${GIWIFI_DEPLOY_HOST:-openwrt}
 REPOSITORY=onprs/GiWifi-Auto
 RELEASE_BASE="https://github.com/$REPOSITORY/releases/latest/download"
-RAW_BASE="https://raw.githubusercontent.com/$REPOSITORY/main/openwrt"
+RAW_BASE="https://raw.githubusercontent.com/$REPOSITORY/refs/heads/main/openwrt"
 LOCAL_DIRECTORY=
 REMOTE_DIRECTORY=
 

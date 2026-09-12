@@ -17,7 +17,7 @@
 已配置 SSH 主机别名 `openwrt` 的开发机需要安装 `curl`、`ssh` 和 `scp`。在任意目录直接执行：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/deploy-online.sh | sh
+curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/deploy-online.sh | sh
 ```
 
 命令会识别 OpenWrt 设备架构，在开发机下载并校验最新 Release，然后自动上传、安装并启动服务。当前支持 `amd64`、`arm64` 和 `mipsle`，OpenWrt 无需访问 GitHub，也不需要在本地克隆仓库或安装 Go。
@@ -86,7 +86,7 @@ ssh -t openwrt '/usr/bin/giwifi-auto tui --config /etc/config/giwifi-auto'
 ## 卸载
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/uninstall.sh | ssh openwrt "sh -s"
+curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/uninstall.sh | ssh openwrt "sh -s"
 ```
 
 卸载不会删除 `/etc/config/giwifi-auto`。源码部署及更多说明见 [OpenWrt 部署文档](./openwrt/README.md)。

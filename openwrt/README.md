@@ -7,7 +7,7 @@ GiWifi-Auto 在 OpenWrt 上安装为 procd 服务，程序路径为 `/usr/bin/gi
 开发机需要安装 `curl`、`ssh` 和 `scp`，并配置可直接登录目标设备的 SSH 主机别名 `openwrt`。在任意目录执行：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/deploy-online.sh | sh
+curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/deploy-online.sh | sh
 ```
 
 在线部署脚本会读取目标设备架构，在开发机下载 GitHub 最新 Release 与 SHA256 校验和，然后上传到 OpenWrt 完成安装。目标设备无需访问 GitHub，也不需要预先复制任何文件。
@@ -17,13 +17,13 @@ curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/depl
 使用其他 SSH 主机别名：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/deploy-online.sh | GIWIFI_DEPLOY_HOST=<主机别名> sh
+curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/deploy-online.sh | GIWIFI_DEPLOY_HOST=<主机别名> sh
 ```
 
 GitHub 需要代理时可通过 `GIWIFI_GITHUB_PROXY` 指定；脚本也会自动读取 `HTTPS_PROXY` 或 Git 的全局 `https.proxy`：
 
 ```sh
-curl --proxy <代理地址> -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/deploy-online.sh | GIWIFI_GITHUB_PROXY=<代理地址> sh
+curl --proxy <代理地址> -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/deploy-online.sh | GIWIFI_GITHUB_PROXY=<代理地址> sh
 ```
 
 ## 配置账号
@@ -120,7 +120,7 @@ sh ./openwrt/install.sh ./giwifi-auto
 ## 卸载
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/uninstall.sh | ssh openwrt "sh -s"
+curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/uninstall.sh | ssh openwrt "sh -s"
 ```
 
 卸载会停止并禁用服务，删除程序和服务文件，保留 `/etc/config/giwifi-auto`。
