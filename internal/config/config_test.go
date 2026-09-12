@@ -228,6 +228,18 @@ func TestDeleteJSONAccountConfigurationRemovesAccountAndCredential(t *testing.T)
 		t.Fatalf("凭据文件删除状态 = %v", err)
 	}
 }
+func TestParseUCISectionExists(t *testing.T) {
+	data := []byte("giwifi-credentials.account_1=credential\ngiwifi-credentials.account_1.password='hidden'\ngiwifi-credentials.other=credential\n")
+	if !parseUCISectionExists(data, "giwifi-credentials", "account_1") {
+		t.Fatal("应识别已存在的 UCI 凭据 section")
+	}
+	if parseUCISectionExists(data, "giwifi-credentials", "missing") {
+		t.Fatal("不应识别不存在的 UCI 凭据 section")
+	}
+	if parseUCISectionExists(data, "other-package", "account_1") {
+		t.Fatal("不应跨 UCI package 识别 section")
+	}
+}
 func TestSaveJSONAccountConfigurationStoresPasswordOutsideConfig(t *testing.T) {
 	path := t.TempDir() + "/config.json"
 	password := "tui-password"

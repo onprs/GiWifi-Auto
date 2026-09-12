@@ -117,6 +117,13 @@ func deleteUCIAccountConfiguration(ctx context.Context, path string, removed Acc
 		return fmt.Errorf("提交 UCI 账号删除失败: %w", err)
 	}
 	if removed.CredentialRef == "uci:giwifi-credentials."+removed.ID+".password" {
+		exists, err := uciSectionExists(ctx, "giwifi-credentials", removed.ID)
+		if err != nil {
+			return fmt.Errorf("检查 UCI 凭据失败: %w", err)
+		}
+		if !exists {
+			return nil
+		}
 		if _, err := runUCI(ctx, "delete", "giwifi-credentials."+removed.ID); err != nil {
 			return fmt.Errorf("删除 UCI 凭据失败: %w", err)
 		}
@@ -126,6 +133,30 @@ func deleteUCIAccountConfiguration(ctx context.Context, path string, removed Acc
 		}
 	}
 	return nil
+}
+
+func uciSectionExists(ctx context.Context, packageName, sectionName string) (bool, error) {
+	output, err := runUCI(ctx, "show", packageName)
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, err
+		}
+		// 可选凭据包不存在时，UCI 会返回退出码 1，此时无需清理凭据。
+		return false, nil
+	}
+	return parseUCISectionExists(output, packageName, sectionName), nil
+}
+
+func parseUCISectionExists(data []byte, packageName, sectionName string) bool {
+	prefix := packageName + "." + sectionName
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == prefix+"=credential" || strings.HasPrefix(line, prefix+".") {
+			return true
+		}
+	}
+	return false
 }
 
 func validateStoredPassword(password string) error {
