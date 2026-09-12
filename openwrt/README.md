@@ -2,29 +2,17 @@
 
 GiWifi-Auto 在 OpenWrt 上安装为 procd 服务，程序路径为 `/usr/bin/giwifi-auto`，配置路径为 `/etc/config/giwifi-auto`。
 
-## 一键部署
+## 一键安装
 
-开发机需要安装 `curl`、`ssh` 和 `scp`，并配置可直接登录目标设备的 SSH 主机别名 `openwrt`。在任意目录执行：
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/deploy-online.sh | sh
-```
-
-在线部署脚本会读取目标设备架构，在开发机下载 GitHub 最新 Release 与 SHA256 校验和，然后上传到 OpenWrt 完成安装。目标设备无需访问 GitHub，也不需要预先复制任何文件。
-
-默认支持 `amd64`、`arm64` 和小端 `mipsle`。首次安装会从 [config.example](./config.example) 创建 `/etc/config/giwifi-auto` 并启用开机启动；已有配置不会被覆盖。更新版本时重新执行同一条命令即可。
-
-使用其他 SSH 主机别名：
+登录 OpenWrt 终端后执行：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/deploy-online.sh | GIWIFI_DEPLOY_HOST=<主机别名> sh
+wget -qO- https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/install-online.sh | sh
 ```
 
-GitHub 需要代理时可通过 `GIWIFI_GITHUB_PROXY` 指定；脚本也会自动读取 `HTTPS_PROXY` 或 Git 的全局 `https.proxy`：
+安装器会自动识别 `amd64`、`arm64` 和小端 `mipsle`，下载 GitHub 最新 Release 与 SHA256 校验和，安装后启动或重启服务。设备需要能够访问 GitHub，并安装 `wget` 或 `curl`。
 
-```sh
-curl --proxy <代理地址> -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/deploy-online.sh | GIWIFI_GITHUB_PROXY=<代理地址> sh
-```
+首次安装会从 [config.example](./config.example) 创建 `/etc/config/giwifi-auto` 并启用开机启动；已有配置不会被覆盖。更新版本时重新执行同一条命令即可。
 
 ## 配置账号
 
@@ -82,28 +70,21 @@ chmod 0600 /etc/config/giwifi-auto /etc/config/giwifi-credentials
 
 ## 从源码部署
 
-源码部署需要 Go 1.23 或更高版本、`ssh`、`scp`，以及可通过密钥登录的 SSH 主机别名。在仓库根目录执行：
+源码部署需要 Go 1.23 或更高版本、`ssh` 和 `scp`。在仓库根目录执行：
 
 ```sh
-sh ./openwrt/deploy.sh
+GIWIFI_DEPLOY_HOST=<SSH 主机> sh ./openwrt/deploy.sh
 ```
 
-脚本会读取目标设备架构、交叉编译当前源码、上传并重启服务。默认目标为 `openwrt`，可指定其他别名：
+脚本会读取目标设备架构、交叉编译当前源码、上传并重启服务。Makefile 提供等价入口：
 
 ```sh
-GIWIFI_DEPLOY_HOST=<主机别名> sh ./openwrt/deploy.sh
-```
-
-Makefile 提供等价入口：
-
-```sh
-make deploy
-make deploy DEPLOY_HOST=<主机别名>
+make deploy DEPLOY_HOST=<SSH 主机>
 ```
 
 ## 手动安装
 
-根据设备实际架构构建，不能仅依据路由器型号判断：
+根据设备实际架构构建：
 
 ```sh
 ubus call system board
@@ -120,7 +101,7 @@ sh ./openwrt/install.sh ./giwifi-auto
 ## 卸载
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/uninstall.sh | ssh openwrt "sh -s"
+wget -qO- https://raw.githubusercontent.com/onprs/GiWifi-Auto/refs/heads/main/openwrt/uninstall.sh | sh
 ```
 
 卸载会停止并禁用服务，删除程序和服务文件，保留 `/etc/config/giwifi-auto`。
