@@ -233,10 +233,6 @@ func (service *Service) ConfigureAccount(ctx context.Context, request AccountCon
 	if ctx == nil {
 		return errors.New("账号配置上下文不能为空")
 	}
-	if strings.TrimSpace(request.ID) == "" {
-		return errors.New("账号 ID 不能为空")
-	}
-
 	service.mu.RLock()
 	path := service.configPath
 	current := service.config
@@ -244,28 +240,40 @@ func (service *Service) ConfigureAccount(ctx context.Context, request AccountCon
 	rootContext := service.rootCtx
 	service.mu.RUnlock()
 	candidate := current
-	candidate.Runtime.PortalLoginURL = request.PortalLoginURL
 	candidate.Accounts = append([]config.AccountConfig(nil), current.Accounts...)
-	accountConfig := config.AccountConfig{
-		ID:               request.ID,
-		DisplayName:      request.DisplayName,
-		Username:         request.Username,
-		Enabled:          request.Enabled,
-		Priority:         100,
-		NetworkInterface: request.NetworkInterface,
-	}
+	requestedID := strings.TrimSpace(request.ID)
 	accountIndex := -1
 	for index, existing := range candidate.Accounts {
-		if existing.ID == request.ID {
+		if existing.ID == requestedID && requestedID != "" {
 			accountIndex = index
-			accountConfig.Priority = existing.Priority
-			accountConfig.CredentialRef = existing.CredentialRef
 			break
 		}
 	}
+	if requestedID != "" && accountIndex < 0 {
+		return fmt.Errorf("账号 %q 不存在", requestedID)
+	}
+
+	var accountConfig config.AccountConfig
+	if accountIndex >= 0 {
+		accountConfig = candidate.Accounts[accountIndex]
+		accountConfig.Username = request.Username
+		accountConfig.Enabled = request.Enabled
+	} else {
+		generatedID, number := nextAccountID(candidate.Accounts)
+		accountConfig = config.AccountConfig{
+			ID:          generatedID,
+			DisplayName: fmt.Sprintf("账号 %d", number),
+			Username:    request.Username,
+			Enabled:     request.Enabled,
+			Priority:    100,
+		}
+	}
+	if accountConfig.NetworkInterface == "" {
+		accountConfig.NetworkInterface = automaticNetworkInterface(ctx, candidate.Accounts, accountConfig.ID)
+	}
 	passwordProvided := request.Password != ""
 	if passwordProvided {
-		credentialRef, err := config.CredentialReferenceForAccount(path, request.ID)
+		credentialRef, err := config.CredentialReferenceForAccount(path, accountConfig.ID)
 		if err != nil {
 			return err
 		}
@@ -285,7 +293,7 @@ func (service *Service) ConfigureAccount(ctx context.Context, request AccountCon
 	if err != nil {
 		return err
 	}
-	if err := config.SaveAccountConfiguration(ctx, path, candidate, request.ID, request.Password, passwordProvided); err != nil {
+	if err := config.SaveAccountConfiguration(ctx, path, candidate, accountConfig.ID, request.Password, passwordProvided); err != nil {
 		return err
 	}
 
@@ -313,6 +321,38 @@ func (service *Service) ConfigureAccount(ctx context.Context, request AccountCon
 	}
 	service.mu.Unlock()
 	return nil
+}
+
+func nextAccountID(accounts []config.AccountConfig) (string, int) {
+	used := make(map[string]struct{}, len(accounts))
+	for _, accountConfig := range accounts {
+		used[accountConfig.ID] = struct{}{}
+	}
+	for number := 1; ; number++ {
+		id := fmt.Sprintf("account_%d", number)
+		if _, exists := used[id]; !exists {
+			return id, number
+		}
+	}
+}
+
+func automaticNetworkInterface(ctx context.Context, accounts []config.AccountConfig, currentID string) string {
+	devices, err := config.DiscoverWANDevices(ctx)
+	if err != nil {
+		return ""
+	}
+	used := make(map[string]struct{}, len(accounts))
+	for _, accountConfig := range accounts {
+		if accountConfig.ID != currentID && accountConfig.NetworkInterface != "" {
+			used[accountConfig.NetworkInterface] = struct{}{}
+		}
+	}
+	for _, device := range devices {
+		if _, exists := used[device]; !exists {
+			return device
+		}
+	}
+	return ""
 }
 
 // RecentEvents 返回近期结构化事件。

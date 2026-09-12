@@ -31,8 +31,7 @@ type StatusResponse struct {
 
 // ConfigResponse 是 TUI 使用的非敏感配置视图。
 type ConfigResponse struct {
-	PortalLoginURL string              `json:"portal_login_url"`
-	Accounts       []AccountConfigView `json:"accounts"`
+	Accounts []AccountConfigView `json:"accounts"`
 }
 
 // AccountConfigView 是不包含凭据引用和密码的账号配置视图。
@@ -48,13 +47,10 @@ type AccountConfigView struct {
 
 // AccountConfigureRequest 是 TUI 保存账号配置的请求。Password 只允许出现在请求中。
 type AccountConfigureRequest struct {
-	ID               string `json:"id"`
-	DisplayName      string `json:"display_name"`
-	Username         string `json:"username"`
-	Password         string `json:"password"`
-	PortalLoginURL   string `json:"portal_login_url"`
-	NetworkInterface string `json:"network_interface"`
-	Enabled          bool   `json:"enabled"`
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Enabled  bool   `json:"enabled"`
 }
 
 // LogsRequest 是 logs.recent 方法的参数。
@@ -171,8 +167,7 @@ func (service *Service) configuration() ConfigResponse {
 	service.mu.RLock()
 	defer service.mu.RUnlock()
 	result := ConfigResponse{
-		PortalLoginURL: service.config.Runtime.PortalLoginURL,
-		Accounts:       make([]AccountConfigView, 0, len(service.config.Accounts)),
+		Accounts: make([]AccountConfigView, 0, len(service.config.Accounts)),
 	}
 	for _, accountConfig := range service.config.Accounts {
 		result.Accounts = append(result.Accounts, AccountConfigView{

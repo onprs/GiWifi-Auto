@@ -41,6 +41,7 @@ const (
 	DefaultMaxResponseBytes = 1 << 20
 	DefaultMaxRedirects     = 3
 	DefaultUserAgent        = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0"
+	DefaultLoginPath        = "/gportal/Web/loginAction"
 	LegacyKey               = "1234567887654321"
 	// DeviceBindingResultCode 是现场 Portal 的 MAC 绑定确认结果码。
 	DeviceBindingResultCode = 124
@@ -377,6 +378,13 @@ func (c Client) Authenticate(ctx context.Context, pageURL *url.URL, username, pa
 	if err != nil {
 		return err
 	}
+	loginEndpoint := c.LoginEndpoint
+	if loginEndpoint == nil {
+		loginEndpoint, err = defaultLoginEndpoint(pageURL)
+		if err != nil {
+			return newError(CategoryConfiguration, "无法确定登录端点", err)
+		}
+	}
 	encrypted, err := EncryptLegacy(formData, iv)
 	if err != nil {
 		return newError(CategoryCrypto, "生成认证载荷失败", err)
@@ -391,7 +399,7 @@ func (c Client) Authenticate(ctx context.Context, pageURL *url.URL, username, pa
 
 	requestContext, cancel := context.WithTimeout(ctx, c.Timeout)
 	defer cancel()
-	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, c.LoginEndpoint.String(), strings.NewReader(payload))
+	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, loginEndpoint.String(), strings.NewReader(payload))
 	if err != nil {
 		return newError(CategoryConfiguration, "创建登录请求失败", err)
 	}
@@ -440,6 +448,10 @@ func (c Client) Authenticate(ctx context.Context, pageURL *url.URL, username, pa
 		}
 	}
 	return newError(CategoryAuthentication, "认证被服务端拒绝", ErrAuthenticationRejected)
+}
+
+func defaultLoginEndpoint(pageURL *url.URL) (*url.URL, error) {
+	return sameOriginURL(pageURL, DefaultLoginPath)
 }
 
 func decodeLoginResponse(body []byte) (loginResponse, error) {
@@ -544,11 +556,10 @@ func (c Client) fetchLoginPage(ctx context.Context, pageURL *url.URL) (Page, err
 }
 
 func (c Client) validate() error {
-	if c.LoginEndpoint == nil {
-		return newError(CategoryConfiguration, "登录端点不能为空", nil)
-	}
-	if _, err := parseAllowedURL(c.LoginEndpoint.String()); err != nil {
-		return newError(CategoryConfiguration, "登录端点无效", err)
+	if c.LoginEndpoint != nil {
+		if _, err := parseAllowedURL(c.LoginEndpoint.String()); err != nil {
+			return newError(CategoryConfiguration, "登录端点无效", err)
+		}
 	}
 	if c.Timeout <= 0 {
 		return newError(CategoryConfiguration, "请求超时必须大于 0", nil)

@@ -13,12 +13,8 @@ import (
 )
 
 const (
-	formPortalURL = iota
-	formAccountID
-	formDisplayName
-	formUsername
+	formUsername = iota
 	formPassword
-	formNetworkInterface
 )
 
 type formField struct {
@@ -30,6 +26,7 @@ type formField struct {
 }
 
 type accountForm struct {
+	id            string
 	fields        []formField
 	active        int
 	editing       bool
@@ -38,25 +35,18 @@ type accountForm struct {
 	err           string
 }
 
-func newAccountForm(configuration daemon.ConfigResponse, existing *daemon.AccountConfigView) *accountForm {
+func newAccountForm(_ daemon.ConfigResponse, existing *daemon.AccountConfigView) *accountForm {
 	form := &accountForm{
 		fields: []formField{
-			{label: "Portal 地址", value: configuration.PortalLoginURL},
-			{label: "账号 ID"},
-			{label: "显示名称"},
 			{label: "用户名"},
 			{label: "密码", secret: true},
-			{label: "网络接口"},
 		},
 	}
 	if existing != nil {
 		form.editing = true
+		form.id = existing.ID
 		form.hasCredential = existing.HasCredential
-		form.fields[formAccountID].value = existing.ID
-		form.fields[formAccountID].readonly = true
-		form.fields[formDisplayName].value = existing.DisplayName
 		form.fields[formUsername].value = existing.Username
-		form.fields[formNetworkInterface].value = existing.NetworkInterface
 	}
 	for index := range form.fields {
 		form.fields[index].cursor = len([]rune(form.fields[index].value))
@@ -213,17 +203,8 @@ func (form *accountForm) deleteAtCursor() {
 }
 
 func (form *accountForm) validate() string {
-	if strings.TrimSpace(form.value(formAccountID)) == "" {
-		return "账号 ID 不能为空"
-	}
-	if strings.TrimSpace(form.value(formDisplayName)) == "" {
-		return "显示名称不能为空"
-	}
 	if strings.TrimSpace(form.value(formUsername)) == "" {
 		return "用户名不能为空"
-	}
-	if strings.TrimSpace(form.value(formPortalURL)) == "" {
-		return "Portal 地址不能为空"
 	}
 	if !form.editing && form.value(formPassword) == "" {
 		return "新账号必须填写密码"
@@ -236,13 +217,10 @@ func (form *accountForm) validate() string {
 
 func (form *accountForm) request() daemon.AccountConfigureRequest {
 	return daemon.AccountConfigureRequest{
-		ID:               form.value(formAccountID),
-		DisplayName:      form.value(formDisplayName),
-		Username:         form.value(formUsername),
-		Password:         form.value(formPassword),
-		PortalLoginURL:   form.value(formPortalURL),
-		NetworkInterface: form.value(formNetworkInterface),
-		Enabled:          true,
+		ID:       form.id,
+		Username: form.value(formUsername),
+		Password: form.value(formPassword),
+		Enabled:  true,
 	}
 }
 
@@ -279,7 +257,11 @@ func (current model) formView() string {
 		width = 80
 	}
 	var output strings.Builder
-	output.WriteString(clip("配置账号", width))
+	if current.form.editing {
+		output.WriteString(clip("编辑账号", width))
+	} else {
+		output.WriteString(clip("添加账号", width))
+	}
 	output.WriteByte('\n')
 	output.WriteString(strings.Repeat("=", minInt(width, 80)))
 	output.WriteByte('\n')

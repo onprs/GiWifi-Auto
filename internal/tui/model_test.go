@@ -80,7 +80,7 @@ func TestUpdateOpensAccountConfigurationForm(t *testing.T) {
 	}
 	updated, _ := current.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 	current = updated.(model)
-	if current.form == nil || !current.form.editing || current.form.value(formAccountID) != "primary" {
+	if current.form == nil || !current.form.editing || current.form.id != "primary" {
 		t.Fatalf("配置表单 = %+v", current.form)
 	}
 }
@@ -95,6 +95,22 @@ func TestAccountFormMasksPassword(t *testing.T) {
 	}
 	if !strings.Contains(view, "**************") {
 		t.Fatalf("TUI 视图未显示密码掩码: %q", view)
+	}
+}
+
+func TestAccountFormOnlyRequestsCredentials(t *testing.T) {
+	form := newAccountForm(daemon.ConfigResponse{}, nil)
+	form.fields[formUsername].value = "user@example.test"
+	form.fields[formPassword].value = "secret-password"
+	request := form.request()
+	if request.ID != "" || request.Username != "user@example.test" || request.Password != "secret-password" || !request.Enabled {
+		t.Fatalf("账号请求 = %+v", request)
+	}
+	view := (model{width: 80, form: form}).View()
+	for _, hiddenField := range []string{"Portal", "账号 ID", "显示名称", "网络接口"} {
+		if strings.Contains(view, hiddenField) {
+			t.Fatalf("TUI 仍显示隐藏配置项 %q: %q", hiddenField, view)
+		}
 	}
 }
 

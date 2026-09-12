@@ -195,10 +195,6 @@ func TestAuthenticateUsesCookieAndEncryptedPayload(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loginEndpoint, err := url.Parse(server.URL + "/gportal/Web/loginAction")
-	if err != nil {
-		t.Fatalf("解析登录端点失败: %v", err)
-	}
 	pageURL, err := url.Parse(server.URL + "/portal")
 	if err != nil {
 		t.Fatalf("解析 Portal 页面地址失败: %v", err)
@@ -207,7 +203,7 @@ func TestAuthenticateUsesCookieAndEncryptedPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建 Cookie Jar 失败: %v", err)
 	}
-	client := NewClient(loginEndpoint)
+	client := NewClient(nil)
 	client.CookieJar = jar
 	client.Timeout = time.Second
 

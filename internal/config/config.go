@@ -156,7 +156,6 @@ func (c Config) Validate() error {
 		issues = append(issues, ValidationIssue{Field: "accounts", Message: fmt.Sprintf("账号数量不能超过 %d", maxAccountCount)})
 	}
 	seenIDs := make(map[string]int, len(c.Accounts))
-	hasEnabledAccount := false
 	for index, account := range c.Accounts {
 		prefix := fmt.Sprintf("accounts[%d]", index)
 
@@ -185,7 +184,6 @@ func (c Config) Validate() error {
 		issues = append(issues, validateText(prefix+".network_interface", account.NetworkInterface, 64, false)...)
 
 		if account.Enabled {
-			hasEnabledAccount = true
 			if strings.TrimSpace(account.Username) == "" {
 				issues = append(issues, ValidationIssue{
 					Field:   prefix + ".username",
@@ -205,13 +203,6 @@ func (c Config) Validate() error {
 				Message: "不能小于 0",
 			})
 		}
-	}
-
-	if hasEnabledAccount && strings.TrimSpace(c.Runtime.PortalLoginURL) == "" {
-		issues = append(issues, ValidationIssue{
-			Field:   "runtime.portal_login_url",
-			Message: "存在启用账号时不能为空",
-		})
 	}
 
 	if len(issues) > 0 {

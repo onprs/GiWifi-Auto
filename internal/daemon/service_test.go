@@ -154,12 +154,9 @@ func TestServiceConfigureAccountPersistsAccountAndPassword(t *testing.T) {
 		t.Fatalf("New() 失败: %v", err)
 	}
 	request := AccountConfigureRequest{
-		ID:             "configured_account",
-		DisplayName:    "配置账号",
-		Username:       "user@example.test",
-		Password:       "tui-password",
-		PortalLoginURL: cfg.Runtime.PortalLoginURL,
-		Enabled:        true,
+		Username: "user@example.test",
+		Password: "tui-password",
+		Enabled:  true,
 	}
 	if err := service.ConfigureAccount(context.Background(), request); err != nil {
 		t.Fatalf("ConfigureAccount() 失败: %v", err)
@@ -168,7 +165,7 @@ func TestServiceConfigureAccountPersistsAccountAndPassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读取保存配置失败: %v", err)
 	}
-	if len(loaded.Accounts) != 1 || loaded.Accounts[0].ID != request.ID || !loaded.Accounts[0].Enabled {
+	if len(loaded.Accounts) != 1 || loaded.Accounts[0].ID != "account_1" || loaded.Accounts[0].DisplayName != "账号 1" || !loaded.Accounts[0].Enabled {
 		t.Fatalf("保存的账号 = %+v", loaded.Accounts)
 	}
 	data, err := os.ReadFile(path)
@@ -255,7 +252,7 @@ func TestServiceSetEnabledDoesNotMutateAfterPersistenceFailure(t *testing.T) {
 	}
 }
 
-func TestServiceRejectsEnablingWithoutPortalEndpoint(t *testing.T) {
+func TestServiceAllowsEnablingWithoutPortalEndpoint(t *testing.T) {
 	cfg := config.Default()
 	cfg.Accounts = []config.AccountConfig{{
 		ID:            "invalid-enable",
@@ -267,8 +264,8 @@ func TestServiceRejectsEnablingWithoutPortalEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() 失败: %v", err)
 	}
-	if err := service.SetEnabled(context.Background(), "invalid-enable", true); err == nil {
-		t.Fatal("缺少 Portal 登录端点时启用账号未被拒绝")
+	if err := service.SetEnabled(context.Background(), "invalid-enable", true); err != nil {
+		t.Fatalf("没有填写 Portal 地址时应允许启用账号: %v", err)
 	}
 }
 
