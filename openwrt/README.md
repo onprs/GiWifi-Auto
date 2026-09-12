@@ -30,7 +30,7 @@ TUI 中按 `a` 添加账号，只填写用户名和密码；按 `Enter` 或 `Ctr
 
 ## 多账号与网络接口
 
-每条需要独立认证的上联都应先在 OpenWrt 中配置为独立网络接口。保存账号时，程序会按 OpenWrt `network` 配置中的 WAN 顺序自动分配上联设备；不需要在 TUI 中填写网络接口。
+每条需要独立认证的上联都应先在 OpenWrt 中配置为独立 VLAN 网络接口。当前这套 Trunk 方案使用固定名称和映射：`wan101` 使用 `eth1.101`，`wan102` 使用 `eth1.102`，`wan103` 使用 `eth1.103`，`wan104` 使用 `eth1.104`。交换机到路由器的 Trunk 口将 VLAN 101～104 全部设置为 Tagged，不使用 untagged/native VLAN。保存账号时，程序会按 `wan101`、`wan102`、`wan103`、`wan104` 的顺序自动分配线路；不需要在 TUI 中填写网络接口。
 
 `GiWifi-Auto` 负责每条线路的 Portal 认证，线路之间的转发负载均衡由 OpenWrt 的 `mwan3` 负责。多 WAN 使用前安装并启用 `mwan3`：
 
