@@ -155,6 +155,10 @@ if [ ! -e /etc/config/giwifi-auto ]; then
 	cp "$CONFIG_PATH" /etc/config/giwifi-auto
 	chmod 0600 /etc/config/giwifi-auto
 fi
+if [ ! -e /etc/config/giwifi-credentials ]; then
+	: > /etc/config/giwifi-credentials
+fi
+chmod 0600 /etc/config/giwifi-credentials
 
 /etc/init.d/giwifi-auto enable
 if /etc/init.d/giwifi-auto running >/dev/null 2>&1; then

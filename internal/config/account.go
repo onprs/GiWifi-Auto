@@ -213,6 +213,41 @@ func saveJSONCredential(path, id, password string) error {
 	return nil
 }
 
+func credentialFilePath(path string) string {
+	return filepath.Join(filepath.Dir(filepath.Clean(path)), "giwifi-credentials")
+}
+
+func ensureUCICredentialFile(path string) (bool, error) {
+	credentialPath := credentialFilePath(path)
+	info, statErr := os.Stat(credentialPath)
+	created := errors.Is(statErr, os.ErrNotExist)
+	if statErr != nil && !created {
+		return false, fmt.Errorf("检查 UCI 凭据文件失败: %w", statErr)
+	}
+	if !created && info.IsDir() {
+		return false, errors.New("UCI 凭据路径不能是目录")
+	}
+
+	file, err := os.OpenFile(credentialPath, os.O_WRONLY|os.O_CREATE, 0o600)
+	if err != nil {
+		return false, fmt.Errorf("创建 UCI 凭据文件失败: %w", err)
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		if created {
+			_ = os.Remove(credentialPath)
+		}
+		return false, fmt.Errorf("设置 UCI 凭据文件权限失败: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		if created {
+			_ = os.Remove(credentialPath)
+		}
+		return false, fmt.Errorf("关闭 UCI 凭据文件失败: %w", err)
+	}
+	return created, nil
+}
+
 func saveUCIAccountConfiguration(ctx context.Context, path string, cfg Config, id, password string, passwordProvided bool) error {
 	packageName, err := uciPackageName(path)
 	if err != nil {
@@ -231,15 +266,27 @@ func saveUCIAccountConfiguration(ctx context.Context, path string, cfg Config, i
 	}
 
 	if passwordProvided {
+		createdCredentialFile, err := ensureUCICredentialFile(path)
+		if err != nil {
+			return err
+		}
+		removeCreatedCredentialFile := func() {
+			if createdCredentialFile {
+				_ = os.Remove(credentialFilePath(path))
+			}
+		}
 		if _, err := runUCI(ctx, "set", "giwifi-credentials."+id+"=credential"); err != nil {
+			removeCreatedCredentialFile()
 			return fmt.Errorf("设置 UCI 凭据 section 失败: %w", err)
 		}
 		if _, err := runUCI(ctx, "set", "giwifi-credentials."+id+".password="+password); err != nil {
 			_, _ = runUCI(ctx, "revert", "giwifi-credentials")
+			removeCreatedCredentialFile()
 			return fmt.Errorf("设置 UCI 凭据失败: %w", err)
 		}
 		if _, err := runUCI(ctx, "commit", "giwifi-credentials"); err != nil {
 			_, _ = runUCI(ctx, "revert", "giwifi-credentials")
+			removeCreatedCredentialFile()
 			return fmt.Errorf("提交 UCI 凭据失败: %w", err)
 		}
 	}
@@ -266,7 +313,7 @@ func saveUCIAccountConfiguration(ctx context.Context, path string, cfg Config, i
 		return fmt.Errorf("提交 UCI 配置失败: %w", err)
 	}
 	if passwordProvided {
-		credentialPath := filepath.Join(filepath.Dir(filepath.Clean(path)), "giwifi-credentials")
+		credentialPath := credentialFilePath(path)
 		if err := os.Chmod(credentialPath, 0o600); err != nil {
 			return fmt.Errorf("设置 UCI 凭据文件权限失败: %w", err)
 		}

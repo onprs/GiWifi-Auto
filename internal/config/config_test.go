@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -240,6 +242,32 @@ func TestParseUCISectionExists(t *testing.T) {
 		t.Fatal("不应跨 UCI package 识别 section")
 	}
 }
+func TestEnsureUCICredentialFileCreatesRestrictedPackage(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "giwifi-auto")
+	created, err := ensureUCICredentialFile(configPath)
+	if err != nil {
+		t.Fatalf("创建 UCI 凭据文件失败: %v", err)
+	}
+	if !created {
+		t.Fatal("首次创建 UCI 凭据文件时应返回 created=true")
+	}
+	credentialPath := credentialFilePath(configPath)
+	info, err := os.Stat(credentialPath)
+	if err != nil {
+		t.Fatalf("读取 UCI 凭据文件失败: %v", err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		t.Fatalf("UCI 凭据文件权限 = %o, want 600", info.Mode().Perm())
+	}
+	created, err = ensureUCICredentialFile(configPath)
+	if err != nil {
+		t.Fatalf("重复确保 UCI 凭据文件失败: %v", err)
+	}
+	if created {
+		t.Fatal("已存在的 UCI 凭据文件不应返回 created=true")
+	}
+}
+
 func TestSaveJSONAccountConfigurationStoresPasswordOutsideConfig(t *testing.T) {
 	path := t.TempDir() + "/config.json"
 	password := "tui-password"

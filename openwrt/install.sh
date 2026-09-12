@@ -21,6 +21,10 @@ if [ ! -e /etc/config/giwifi-auto ]; then
 	cp "$(dirname "$0")/config.example" /etc/config/giwifi-auto
 	chmod 0600 /etc/config/giwifi-auto
 fi
+if [ ! -e /etc/config/giwifi-credentials ]; then
+	: > /etc/config/giwifi-credentials
+fi
+chmod 0600 /etc/config/giwifi-credentials
 
 /etc/init.d/giwifi-auto enable
 printf '%s\n' "安装完成，配置文件：/etc/config/giwifi-auto"
