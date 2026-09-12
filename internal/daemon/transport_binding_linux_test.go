@@ -3,10 +3,29 @@
 package daemon
 
 import (
+	"net"
 	"net/http"
 	"testing"
 )
 
+func TestSelectInterfaceIPv4Address(t *testing.T) {
+	addresses := []net.Addr{
+		&net.IPNet{IP: net.ParseIP("0.0.0.0"), Mask: net.CIDRMask(0, 32)},
+		&net.IPNet{IP: net.ParseIP("169.254.1.2"), Mask: net.CIDRMask(16, 32)},
+		&net.IPAddr{IP: net.ParseIP("10.20.1.159")},
+	}
+
+	got := selectInterfaceIPv4Address(addresses)
+	if got == nil || got.String() != "10.20.1.159" {
+		t.Fatalf("选中的接口 IPv4 地址 = %v", got)
+	}
+}
+
+func TestInterfaceTCPAddressSkipsIPv6Destination(t *testing.T) {
+	if got := interfaceTCPAddress("lo", "tcp6", "[::1]:80"); got != nil {
+		t.Fatalf("IPv6 目标不应绑定 IPv4 本地地址: %v", got)
+	}
+}
 func TestDefaultTransportCanBindAccountInterface(t *testing.T) {
 	base := defaultTransport()
 	transport, ok := base.(*http.Transport)
