@@ -26,6 +26,15 @@ func TestInterfaceTCPAddressSkipsIPv6Destination(t *testing.T) {
 		t.Fatalf("IPv6 目标不应绑定 IPv4 本地地址: %v", got)
 	}
 }
+func TestParseInterfaceRoutingMark(t *testing.T) {
+	routeOutput := []byte("default via 10.20.1.1 dev eth1.103 table 3 proto static\n")
+	ruleOutput := []byte("2003: from all fwmark 0x300/0x3f00 lookup 3\n")
+
+	mark, found := parseInterfaceRoutingMark(routeOutput, ruleOutput)
+	if !found || mark != 0x300 {
+		t.Fatalf("接口策略路由标记 = %#x, %v", mark, found)
+	}
+}
 func TestDefaultTransportCanBindAccountInterface(t *testing.T) {
 	base := defaultTransport()
 	transport, ok := base.(*http.Transport)
