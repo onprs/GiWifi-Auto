@@ -21,12 +21,14 @@ const (
 	MethodAccountEnable    = "account.enable"
 	MethodAccountDisable   = "account.disable"
 	MethodAccountConfigure = "account.configure"
+	MethodAccountDelete    = "account.delete"
 	MethodReload           = "reload"
 )
 
 // StatusResponse 是 status 方法的返回值。
 type StatusResponse struct {
-	Accounts []account.Snapshot `json:"accounts"`
+	Accounts   []account.Snapshot `json:"accounts"`
+	Interfaces []InterfaceStatus  `json:"interfaces"`
 }
 
 // ConfigResponse 是 TUI 使用的非敏感配置视图。
@@ -77,7 +79,7 @@ func (service *Service) Handle(ctx context.Context, request control.Request) (in
 			OK bool `json:"ok"`
 		}{OK: true}, nil
 	case MethodStatus:
-		return StatusResponse{Accounts: service.Status()}, nil
+		return service.statusResponse(ctx), nil
 	case MethodConfig:
 		return service.configuration(), nil
 	case MethodRecentLogs:
@@ -134,6 +136,21 @@ func (service *Service) Handle(ctx context.Context, request control.Request) (in
 		}
 		if err := service.ConfigureAccount(ctx, params); err != nil {
 			return nil, &control.RPCError{Code: "account_configure_failed", Message: "账号配置未保存: " + err.Error()}
+		}
+		return struct{}{}, nil
+	case MethodAccountDelete:
+		var params AccountRequest
+		if rpcError := decodeParams(request, &params); rpcError != nil {
+			return nil, rpcError
+		}
+		if params.ID == "" {
+			return nil, &control.RPCError{Code: "invalid_params", Message: "账号 ID 不能为空"}
+		}
+		if !service.hasAccount(params.ID) {
+			return nil, &control.RPCError{Code: "account_not_found", Message: "账号不存在"}
+		}
+		if err := service.DeleteAccount(ctx, params.ID); err != nil {
+			return nil, &control.RPCError{Code: "account_delete_failed", Message: "账号删除未保存: " + err.Error()}
 		}
 		return struct{}{}, nil
 	case MethodReload:

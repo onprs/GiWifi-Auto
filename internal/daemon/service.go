@@ -355,6 +355,75 @@ func automaticNetworkInterface(ctx context.Context, accounts []config.AccountCon
 	return ""
 }
 
+// DeleteAccount 删除账号配置和运行器，成功后立即生效。
+func (service *Service) DeleteAccount(ctx context.Context, id string) error {
+	service.lifecycleMu.Lock()
+	defer service.lifecycleMu.Unlock()
+	if ctx == nil {
+		return errors.New("账号删除上下文不能为空")
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return errors.New("账号 ID 不能为空")
+	}
+
+	service.mu.RLock()
+	path := service.configPath
+	current := service.config
+	started := service.started
+	rootContext := service.rootCtx
+	service.mu.RUnlock()
+	accountIndex := -1
+	for index, accountConfig := range current.Accounts {
+		if accountConfig.ID == id {
+			accountIndex = index
+			break
+		}
+	}
+	if accountIndex < 0 {
+		return fmt.Errorf("账号 %q 不存在", id)
+	}
+	removed := current.Accounts[accountIndex]
+	candidate := current
+	candidate.Accounts = make([]config.AccountConfig, 0, len(current.Accounts)-1)
+	candidate.Accounts = append(candidate.Accounts, current.Accounts[:accountIndex]...)
+	candidate.Accounts = append(candidate.Accounts, current.Accounts[accountIndex+1:]...)
+	if err := candidate.Validate(); err != nil {
+		return err
+	}
+
+	newLimiter := newRequestLimiter(candidate.Runtime.MaxConcurrentRequests)
+	newRunners, newOrder, err := service.buildRunners(candidate, newLimiter)
+	if err != nil {
+		return err
+	}
+	if err := config.DeleteAccountConfiguration(ctx, path, candidate, removed); err != nil {
+		return err
+	}
+
+	service.mu.Lock()
+	oldCancel := service.runCancel
+	service.runCancel = nil
+	service.started = false
+	service.mu.Unlock()
+	if oldCancel != nil {
+		oldCancel()
+	}
+	service.wg.Wait()
+
+	service.mu.Lock()
+	service.config = candidate
+	service.limiter = newLimiter
+	service.runners = newRunners
+	service.order = newOrder
+	if started && rootContext != nil && rootContext.Err() == nil {
+		service.rootCtx = rootContext
+		service.runContextLocked()
+	}
+	service.mu.Unlock()
+	return nil
+}
+
 // RecentEvents 返回近期结构化事件。
 func (service *Service) RecentEvents(limit int) []eventlog.Event {
 	return service.events.Recent(limit)

@@ -71,6 +71,63 @@ func SaveAccountConfiguration(ctx context.Context, path string, cfg Config, id, 
 	return saveUCIAccountConfiguration(ctx, path, cfg, id, password, passwordProvided)
 }
 
+// DeleteAccountConfiguration 持久化删除账号后的配置，并清理程序管理的凭据。
+func DeleteAccountConfiguration(ctx context.Context, path string, cfg Config, removed AccountConfig) error {
+	if ctx == nil {
+		return errors.New("账号删除上下文不能为空")
+	}
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("账号删除保存前校验失败: %w", err)
+	}
+	if !validAccountID(removed.ID) {
+		return errors.New("被删除的账号 ID 无效")
+	}
+
+	if strings.HasSuffix(strings.ToLower(path), ".json") {
+		if err := SaveFileAtomic(path, cfg); err != nil {
+			return err
+		}
+		return removeJSONCredential(path, removed)
+	}
+	return deleteUCIAccountConfiguration(ctx, path, removed)
+}
+
+func removeJSONCredential(path string, removed AccountConfig) error {
+	expected, err := CredentialReferenceForAccount(path, removed.ID)
+	if err != nil || removed.CredentialRef != expected {
+		return nil
+	}
+	credentialPath := strings.TrimPrefix(expected, "file:")
+	if err := os.Remove(credentialPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("删除账号凭据文件失败: %w", err)
+	}
+	return nil
+}
+
+func deleteUCIAccountConfiguration(ctx context.Context, path string, removed AccountConfig) error {
+	packageName, err := uciPackageName(path)
+	if err != nil {
+		return err
+	}
+	if _, err := runUCI(ctx, "delete", packageName+"."+removed.ID); err != nil {
+		return fmt.Errorf("删除 UCI 账号失败: %w", err)
+	}
+	if _, err := runUCI(ctx, "commit", packageName); err != nil {
+		_, _ = runUCI(ctx, "revert", packageName)
+		return fmt.Errorf("提交 UCI 账号删除失败: %w", err)
+	}
+	if removed.CredentialRef == "uci:giwifi-credentials."+removed.ID+".password" {
+		if _, err := runUCI(ctx, "delete", "giwifi-credentials."+removed.ID); err != nil {
+			return fmt.Errorf("删除 UCI 凭据失败: %w", err)
+		}
+		if _, err := runUCI(ctx, "commit", "giwifi-credentials"); err != nil {
+			_, _ = runUCI(ctx, "revert", "giwifi-credentials")
+			return fmt.Errorf("提交 UCI 凭据删除失败: %w", err)
+		}
+	}
+	return nil
+}
+
 func validateStoredPassword(password string) error {
 	if password == "" {
 		return errors.New("密码不能为空")

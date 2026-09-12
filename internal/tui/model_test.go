@@ -114,6 +114,47 @@ func TestAccountFormOnlyRequestsCredentials(t *testing.T) {
 	}
 }
 
+func TestUpdateConfirmsAccountDeletion(t *testing.T) {
+	current := model{accounts: []account.Snapshot{{ID: "primary"}}}
+	updated, command := current.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	current = updated.(model)
+	if !current.confirmDelete || current.deleteID != "primary" || command != nil {
+		t.Fatalf("删除确认状态 = %+v, command=%v", current, command)
+	}
+	updated, command = current.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	current = updated.(model)
+	if current.confirmDelete || current.deleteID != "" || command != nil {
+		t.Fatalf("取消删除状态 = %+v, command=%v", current, command)
+	}
+}
+
+func TestViewShowsAccountInterfaceAndLineStatus(t *testing.T) {
+	current := model{
+		accounts: []account.Snapshot{{ID: "primary", DisplayName: "主账号", Enabled: true, State: account.StatePortal}},
+		configuration: daemon.ConfigResponse{Accounts: []daemon.AccountConfigView{{
+			ID:               "primary",
+			Username:         "user@example.test",
+			NetworkInterface: "eth1",
+		}}},
+		interfaces: []daemon.InterfaceStatus{{
+			Name:          "eth1",
+			Present:       true,
+			AdminUp:       true,
+			Carrier:       true,
+			OperState:     "up",
+			IPv4Addresses: []string{"192.0.2.10"},
+		}},
+		width:  100,
+		height: 30,
+	}
+	view := current.View()
+	for _, value := range []string{"账号与线路", "[主账号] -> [eth1]", "线路状态", "192.0.2.10", "Enter检测", "D删除"} {
+		if !strings.Contains(view, value) {
+			t.Fatalf("界面缺少 %q: %q", value, view)
+		}
+	}
+}
+
 func TestUpdateLoadsStatusAndClampsSelection(t *testing.T) {
 	current := model{selected: 3}
 	updated, _ := current.Update(statusMessage{result: daemon.StatusResponse{Accounts: []account.Snapshot{{ID: "only"}}}})

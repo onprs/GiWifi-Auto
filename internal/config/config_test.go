@@ -198,6 +198,36 @@ func TestConfigJSONRoundTripDoesNotAddSecrets(t *testing.T) {
 	}
 }
 
+func TestDeleteJSONAccountConfigurationRemovesAccountAndCredential(t *testing.T) {
+	path := t.TempDir() + "/config.json"
+	credentialRef, err := CredentialReferenceForAccount(path, "remove_account")
+	if err != nil {
+		t.Fatalf("CredentialReferenceForAccount() 失败: %v", err)
+	}
+	cfg := Default()
+	cfg.Accounts = []AccountConfig{{
+		ID:            "remove_account",
+		DisplayName:   "待删除账号",
+		Username:      "user@example.test",
+		CredentialRef: credentialRef,
+	}}
+	if err := SaveAccountConfiguration(context.Background(), path, cfg, "remove_account", "delete-password", true); err != nil {
+		t.Fatalf("准备账号失败: %v", err)
+	}
+	if err := DeleteAccountConfiguration(context.Background(), path, Default(), cfg.Accounts[0]); err != nil {
+		t.Fatalf("DeleteAccountConfiguration() 失败: %v", err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("读取删除后的配置失败: %v", err)
+	}
+	if len(loaded.Accounts) != 0 {
+		t.Fatalf("删除后的账号 = %+v", loaded.Accounts)
+	}
+	if _, err := os.Stat(strings.TrimPrefix(credentialRef, "file:")); !os.IsNotExist(err) {
+		t.Fatalf("凭据文件删除状态 = %v", err)
+	}
+}
 func TestSaveJSONAccountConfigurationStoresPasswordOutsideConfig(t *testing.T) {
 	path := t.TempDir() + "/config.json"
 	password := "tui-password"

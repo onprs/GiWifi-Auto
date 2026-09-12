@@ -195,6 +195,48 @@ func TestServiceConfigureAccountPersistsAccountAndPassword(t *testing.T) {
 	}
 }
 
+func TestServiceDeleteAccountRemovesConfigurationAndRunner(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	credentialRef, err := config.CredentialReferenceForAccount(path, "remove-account")
+	if err != nil {
+		t.Fatalf("生成凭据引用失败: %v", err)
+	}
+	cfg := config.Default()
+	cfg.Accounts = []config.AccountConfig{{
+		ID:            "remove-account",
+		DisplayName:   "待删除账号",
+		Username:      "user@example.test",
+		CredentialRef: credentialRef,
+	}}
+	if err := config.SaveAccountConfiguration(context.Background(), path, cfg, "remove-account", "delete-password", true); err != nil {
+		t.Fatalf("准备账号失败: %v", err)
+	}
+	loaded, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatalf("读取准备配置失败: %v", err)
+	}
+	service, err := New(loaded, path, Dependencies{})
+	if err != nil {
+		t.Fatalf("New() 失败: %v", err)
+	}
+	if err := service.DeleteAccount(context.Background(), "remove-account"); err != nil {
+		t.Fatalf("DeleteAccount() 失败: %v", err)
+	}
+	if len(service.Status()) != 0 {
+		t.Fatalf("删除后的运行器状态 = %+v", service.Status())
+	}
+	deleted, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatalf("读取删除后的配置失败: %v", err)
+	}
+	if len(deleted.Accounts) != 0 {
+		t.Fatalf("删除后的配置 = %+v", deleted.Accounts)
+	}
+	if _, err := os.Stat(strings.TrimPrefix(credentialRef, "file:")); !os.IsNotExist(err) {
+		t.Fatalf("凭据侧车删除状态 = %v", err)
+	}
+}
+
 func TestServiceSetEnabledPersistsValidatedConfig(t *testing.T) {
 	path := t.TempDir() + "/config.json"
 	cfg := config.Default()
