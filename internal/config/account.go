@@ -136,7 +136,7 @@ func deleteUCIAccountConfiguration(ctx context.Context, path string, removed Acc
 }
 
 func uciSectionExists(ctx context.Context, packageName, sectionName string) (bool, error) {
-	output, err := runUCI(ctx, "show", packageName)
+	output, err := runUCI(ctx, "show", packageName+"."+sectionName)
 	if err != nil {
 		if ctx.Err() != nil {
 			return false, err
