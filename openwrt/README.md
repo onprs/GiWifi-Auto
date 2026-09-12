@@ -2,40 +2,29 @@
 
 GiWifi-Auto 在 OpenWrt 上安装为 procd 服务，程序路径为 `/usr/bin/giwifi-auto`，配置路径为 `/etc/config/giwifi-auto`。
 
-## 部署准备
-
-开发机需要：
-
-- Go 1.23 或更高版本
-- `ssh` 和 `scp`
-- 可通过密钥直接登录 OpenWrt 的 SSH 主机别名
-
-默认部署目标为 `openwrt`。目标设备需要使用 `amd64`、`arm64` 或小端 `mipsle` 架构。
-
 ## 一键部署
 
-在仓库根目录执行：
+开发机需要安装 `curl`、`ssh` 和 `scp`，并配置可直接登录目标设备的 SSH 主机别名 `openwrt`。在任意目录执行：
 
 ```sh
-sh ./openwrt/deploy.sh
+curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/deploy-online.sh | sh
 ```
 
-部署命令会自动读取目标设备的 `uname -m`，选择对应的 Go 架构，完成交叉编译、上传、安装、服务重启和运行状态检查。
+在线部署脚本会读取目标设备架构，在开发机下载 GitHub 最新 Release 与 SHA256 校验和，然后上传到 OpenWrt 完成安装。目标设备无需访问 GitHub，也不需要预先复制任何文件。
 
-指定其他 SSH 主机别名：
+默认支持 `amd64`、`arm64` 和小端 `mipsle`。首次安装会从 [config.example](./config.example) 创建 `/etc/config/giwifi-auto` 并启用开机启动；已有配置不会被覆盖。更新版本时重新执行同一条命令即可。
+
+使用其他 SSH 主机别名：
 
 ```sh
-GIWIFI_DEPLOY_HOST=<主机别名> sh ./openwrt/deploy.sh
+curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/deploy-online.sh | GIWIFI_DEPLOY_HOST=<主机别名> sh
 ```
 
-也可以使用 Makefile 中的等价入口：
+GitHub 需要代理时可通过 `GIWIFI_GITHUB_PROXY` 指定；脚本也会自动读取 `HTTPS_PROXY` 或 Git 的全局 `https.proxy`：
 
 ```sh
-make deploy
-make deploy DEPLOY_HOST=<主机别名>
+curl --proxy <代理地址> -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/deploy-online.sh | GIWIFI_GITHUB_PROXY=<代理地址> sh
 ```
-
-首次安装会从 [config.example](./config.example) 创建 `/etc/config/giwifi-auto` 并启用开机启动；已有配置不会被覆盖。更新版本时重新执行部署命令即可。
 
 ## 配置账号
 
@@ -91,6 +80,27 @@ chmod 0600 /etc/config/giwifi-auto /etc/config/giwifi-credentials
 /usr/bin/giwifi-auto tui --config /etc/config/giwifi-auto
 ```
 
+## 从源码部署
+
+源码部署需要 Go 1.23 或更高版本、`ssh`、`scp`，以及可通过密钥登录的 SSH 主机别名。在仓库根目录执行：
+
+```sh
+sh ./openwrt/deploy.sh
+```
+
+脚本会读取目标设备架构、交叉编译当前源码、上传并重启服务。默认目标为 `openwrt`，可指定其他别名：
+
+```sh
+GIWIFI_DEPLOY_HOST=<主机别名> sh ./openwrt/deploy.sh
+```
+
+Makefile 提供等价入口：
+
+```sh
+make deploy
+make deploy DEPLOY_HOST=<主机别名>
+```
+
 ## 手动安装
 
 根据设备实际架构构建，不能仅依据路由器型号判断：
@@ -107,14 +117,10 @@ CGO_ENABLED=0 GOOS=linux GOARCH=<目标架构> \
 sh ./openwrt/install.sh ./giwifi-auto
 ```
 
-安装脚本只启用服务。配置完成后再启动或重启服务。
-
 ## 卸载
 
-在仓库根目录将卸载脚本发送到设备执行：
-
 ```sh
-ssh openwrt 'sh -s' < ./openwrt/uninstall.sh
+curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/uninstall.sh | ssh openwrt "sh -s"
 ```
 
 卸载会停止并禁用服务，删除程序和服务文件，保留 `/etc/config/giwifi-auto`。

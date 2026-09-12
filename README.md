@@ -14,21 +14,15 @@
 
 ## 一键部署
 
-准备一台安装了 Go 1.23 或更高版本及 OpenSSH 客户端的开发机，并在 `~/.ssh/config` 中配置可直接登录 OpenWrt 的主机别名 `openwrt`。在仓库根目录执行：
+已配置 SSH 主机别名 `openwrt` 的开发机需要安装 `curl`、`ssh` 和 `scp`。在任意目录直接执行：
 
 ```sh
-sh ./openwrt/deploy.sh
+curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/deploy-online.sh | sh
 ```
 
-该命令会识别目标设备架构、交叉编译、上传程序、安装服务并重启。当前支持 `amd64`、`arm64` 和 `mipsle`。
+命令会识别 OpenWrt 设备架构，在开发机下载并校验最新 Release，然后自动上传、安装并启动服务。当前支持 `amd64`、`arm64` 和 `mipsle`，OpenWrt 无需访问 GitHub，也不需要在本地克隆仓库或安装 Go。
 
-使用其他 SSH 主机别名时执行：
-
-```sh
-GIWIFI_DEPLOY_HOST=<主机别名> sh ./openwrt/deploy.sh
-```
-
-首次部署会创建 `/etc/config/giwifi-auto` 示例配置；再次部署不会覆盖现有配置。
+首次部署会创建 `/etc/config/giwifi-auto` 示例配置；再次执行同一命令即可更新程序，现有配置不会被覆盖。
 
 ## 配置
 
@@ -54,7 +48,7 @@ chmod 0600 /etc/config/giwifi-auto /etc/config/giwifi-credentials
 
 ## 使用
 
-在 OpenWrt 上查询服务和账号状态：
+查询服务和账号状态：
 
 ```sh
 /etc/init.d/giwifi-auto status
@@ -89,14 +83,10 @@ ssh -t openwrt '/usr/bin/giwifi-auto tui --config /etc/config/giwifi-auto'
 /etc/init.d/giwifi-auto reload
 ```
 
-## 更新与卸载
-
-更新时拉取最新代码并重新执行一键部署命令，现有 UCI 配置会保留。
-
-卸载程序和服务：
+## 卸载
 
 ```sh
-ssh openwrt 'sh -s' < ./openwrt/uninstall.sh
+curl -fsSL https://raw.githubusercontent.com/onprs/GiWifi-Auto/main/openwrt/uninstall.sh | ssh openwrt "sh -s"
 ```
 
-卸载不会删除 `/etc/config/giwifi-auto`。更多部署说明见 [OpenWrt 部署文档](./openwrt/README.md)。
+卸载不会删除 `/etc/config/giwifi-auto`。源码部署及更多说明见 [OpenWrt 部署文档](./openwrt/README.md)。
