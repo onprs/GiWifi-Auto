@@ -479,6 +479,9 @@ func (service *Service) buildRunners(cfg config.Config, limiter *requestLimiter)
 		probe.Transport = transport
 		probe.CookieJar = jar
 		probe.Timeout = time.Duration(cfg.Runtime.RequestTimeoutSeconds) * time.Second
+		probe.FallbackURL = func(ctx context.Context) (string, error) {
+			return interfaceGatewayURL(ctx, accountConfig.NetworkInterface)
+		}
 
 		var loginEndpoint *url.URL
 		if cfg.Runtime.PortalLoginURL != "" {

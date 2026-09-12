@@ -3,6 +3,7 @@ package connectivity
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -158,6 +159,39 @@ func TestProbeReturnsOfflineForTransportError(t *testing.T) {
 	}
 }
 
+func TestProbeFallsBackToURLAfterNetworkError(t *testing.T) {
+	calls := make([]string, 0, 2)
+	probe := New()
+	probe.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls = append(calls, request.URL.String())
+		if request.URL.Host == "primary.example.test" {
+			return nil, errors.New("primary endpoint unavailable")
+		}
+		return &http.Response{
+			StatusCode: http.StatusFound,
+			Header:     http.Header{"Location": []string{"/login"}},
+			Body:       io.NopCloser(strings.NewReader("")),
+			Request:    request,
+		}, nil
+	})
+	probe.FallbackURL = func(context.Context) (string, error) {
+		return "http://gateway.example.test/", nil
+	}
+
+	result, err := probe.Check(context.Background(), "http://primary.example.test/check")
+	if err != nil {
+		t.Fatalf("Check() 失败: %v", err)
+	}
+	if result.Status != StatusPortal || result.RedirectURL == nil {
+		t.Fatalf("备用地址结果 = %+v", result)
+	}
+	if result.RedirectURL.String() != "http://gateway.example.test/login" {
+		t.Fatalf("备用地址重定向 = %q", result.RedirectURL.String())
+	}
+	if len(calls) != 2 || calls[0] != "http://primary.example.test/check" || calls[1] != "http://gateway.example.test/" {
+		t.Fatalf("探测请求顺序 = %v", calls)
+	}
+}
 func TestProbeHonorsTimeout(t *testing.T) {
 	probe := New()
 	probe.Timeout = 10 * time.Millisecond

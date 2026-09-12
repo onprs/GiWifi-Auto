@@ -75,6 +75,9 @@ type Result struct {
 	RedirectURL *url.URL
 }
 
+// URLResolver 在连通性探测失败时提供备用探测地址。
+type URLResolver func(context.Context) (string, error)
+
 // Probe 执行一次不跟随重定向的连通性探测。
 type Probe struct {
 	Transport        http.RoundTripper
@@ -83,6 +86,7 @@ type Probe struct {
 	MaxResponseBytes int64
 	UserAgent        string
 	SuccessMarker    string
+	FallbackURL      URLResolver
 }
 
 // New 返回使用兼容默认值的探测器。
@@ -115,6 +119,22 @@ func (p Probe) Check(ctx context.Context, rawURL string) (Result, error) {
 		return Result{}, newProbeError(CategoryConfiguration, err.Error(), err)
 	}
 
+	result, err := p.checkURL(ctx, target)
+	if err == nil || ctx.Err() != nil || p.FallbackURL == nil || !isNetworkProbeError(err) {
+		return result, err
+	}
+	fallbackRawURL, fallbackErr := p.FallbackURL(ctx)
+	if fallbackErr != nil || strings.TrimSpace(fallbackRawURL) == "" {
+		return result, err
+	}
+	fallbackTarget, fallbackParseErr := parseHTTPURL(fallbackRawURL)
+	if fallbackParseErr != nil || target.String() == fallbackTarget.String() {
+		return result, err
+	}
+	return p.checkURL(ctx, fallbackTarget)
+}
+
+func (p Probe) checkURL(ctx context.Context, target *url.URL) (Result, error) {
 	requestContext, cancel := context.WithTimeout(ctx, p.Timeout)
 	defer cancel()
 
@@ -173,6 +193,11 @@ func (p Probe) Check(ctx context.Context, rawURL string) (Result, error) {
 		result.Status = StatusAuthenticated
 	}
 	return result, nil
+}
+
+func isNetworkProbeError(err error) bool {
+	var probeErr *ProbeError
+	return errors.As(err, &probeErr) && probeErr.Category == CategoryNetwork
 }
 
 func newProbeError(category ErrorCategory, message string, cause error) *ProbeError {
