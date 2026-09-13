@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -97,6 +98,33 @@ func TestServiceCompletesAuthenticationAndVerification(t *testing.T) {
 		if strings.Contains(event.Message, password) {
 			t.Fatalf("事件泄露密码: %+v", event)
 		}
+	}
+}
+
+func TestRepairNetworkInterfacesRemapsMissingAndAssignsEmpty(t *testing.T) {
+	cfg := config.Config{
+		Accounts: []config.AccountConfig{
+			{ID: "first", NetworkInterface: "missing-uplink"},
+			{ID: "second", NetworkInterface: "uplink-b"},
+			{ID: "third"},
+		},
+	}
+	devices := []string{"uplink-a", "uplink-b", "uplink-c"}
+	discovered := map[string]struct{}{
+		"uplink-a": {},
+		"uplink-b": {},
+		"uplink-c": {},
+	}
+
+	repaired := repairNetworkInterfaces(cfg, discovered, devices)
+	got := []string{
+		repaired.Accounts[0].NetworkInterface,
+		repaired.Accounts[1].NetworkInterface,
+		repaired.Accounts[2].NetworkInterface,
+	}
+	want := []string{"uplink-a", "uplink-b", "uplink-c"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("修复后的接口映射 = %#v, want %#v", got, want)
 	}
 }
 

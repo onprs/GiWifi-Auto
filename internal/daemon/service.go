@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -59,6 +60,7 @@ func New(cfg config.Config, configPath string, deps Dependencies) (*Service, err
 	if deps.TransportFactory == nil {
 		deps.TransportFactory = defaultTransport
 	}
+	cfg = autoRepairNetworkInterfaces(context.Background(), cfg)
 
 	service := &Service{
 		config:     cfg,
@@ -127,6 +129,7 @@ func (service *Service) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	cfg = autoRepairNetworkInterfaces(ctx, cfg)
 	if started && cfg.Runtime.ControlSocket != controlSocket {
 		return errors.New("守护进程运行期间不能重载控制 Socket 地址，请重启服务")
 	}
@@ -239,6 +242,7 @@ func (service *Service) ConfigureAccount(ctx context.Context, request AccountCon
 	started := service.started
 	rootContext := service.rootCtx
 	service.mu.RUnlock()
+	current = autoRepairNetworkInterfaces(ctx, current)
 	candidate := current
 	candidate.Accounts = append([]config.AccountConfig(nil), current.Accounts...)
 	requestedID := strings.TrimSpace(request.ID)
@@ -321,6 +325,59 @@ func (service *Service) ConfigureAccount(ctx context.Context, request AccountCon
 	}
 	service.mu.Unlock()
 	return nil
+}
+
+func autoRepairNetworkInterfaces(ctx context.Context, cfg config.Config) config.Config {
+	if ctx == nil {
+		return cfg
+	}
+	discoveryContext, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	devices, err := config.DiscoverWANDevices(discoveryContext)
+	if err != nil || len(devices) == 0 {
+		return cfg
+	}
+
+	discovered := make(map[string]struct{}, len(devices))
+	for _, device := range devices {
+		discovered[device] = struct{}{}
+	}
+	return repairNetworkInterfaces(cfg, discovered, devices)
+}
+
+func repairNetworkInterfaces(cfg config.Config, discovered map[string]struct{}, devices []string) config.Config {
+	used := make(map[string]struct{}, len(cfg.Accounts))
+	for index := range cfg.Accounts {
+		name := cfg.Accounts[index].NetworkInterface
+		if name == "" {
+			continue
+		}
+		if _, exists := discovered[name]; exists || networkInterfacePresent(name) {
+			used[name] = struct{}{}
+			continue
+		}
+		cfg.Accounts[index].NetworkInterface = ""
+	}
+
+	for index := range cfg.Accounts {
+		if cfg.Accounts[index].NetworkInterface != "" {
+			continue
+		}
+		for _, device := range devices {
+			if _, exists := used[device]; exists {
+				continue
+			}
+			cfg.Accounts[index].NetworkInterface = device
+			used[device] = struct{}{}
+			break
+		}
+	}
+	return cfg
+}
+
+func networkInterfacePresent(name string) bool {
+	_, err := net.InterfaceByName(name)
+	return err == nil
 }
 
 func nextAccountID(accounts []config.AccountConfig) (string, int) {

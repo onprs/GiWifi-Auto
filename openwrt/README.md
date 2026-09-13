@@ -28,19 +28,11 @@ giwifi-auto
 
 主界面会显示账号与接口的对应关系、接口是否存在、管理状态、物理载波、运行状态、IPv4 地址、认证状态、最近结果、重试次数和下次检查时间。底部会显示当前可用操作；按 `?` 可查看完整操作列表。按 `D` 或 `Delete` 删除当前账号，程序会要求确认。
 
-## 多账号与网络接口
+## 多账号与网络线路
 
-每条需要独立认证的上联都应先在 OpenWrt 中配置为独立 VLAN 网络接口。当前这套 Trunk 方案使用固定名称和映射：`wan101` 使用 `eth1.101`，`wan102` 使用 `eth1.102`，`wan103` 使用 `eth1.103`，`wan104` 使用 `eth1.104`。交换机到路由器的 Trunk 口将 VLAN 101～104 全部设置为 Tagged，不使用 untagged/native VLAN。保存账号时，程序会按 `wan101`、`wan102`、`wan103`、`wan104` 的顺序自动分配线路；不需要在 TUI 中填写网络接口。
+程序会读取 OpenWrt 当前运行中的 IPv4 上联线路、地址和默认路由，自动识别实际出口接口，并按线路优先级为账号分配认证线路。添加账号时只填写用户名和密码，无需填写 VLAN、接口名称、网关或策略路由标记。线路暂时不可用时，程序会等待线路恢复。
 
-`GiWifi-Auto` 负责每条线路的 Portal 认证，线路之间的转发负载均衡由 OpenWrt 的 `mwan3` 负责。多 WAN 使用前安装并启用 `mwan3`：
-
-```sh
-opkg update
-opkg install mwan3
-/etc/init.d/mwan3 enable
-```
-
-将各上联网络加入防火墙的 `wan` zone，并在 `mwan3` 中为每条上联创建 interface/member，加入同一个 `balanced` policy，再将 IPv4 默认规则指向该 policy。启用策略路由时应关闭防火墙的 `flow_offloading` 和 `flow_offloading_hw`。
+多 WAN 的转发策略由 OpenWrt 当前网络配置负责，GiWifi-Auto 会自动为认证请求选择对应线路。在 OpenWrt 已建立网络线路的设备上，账号设置不依赖固定的 WAN 名称、VLAN 编号或物理网卡名称。
 
 ## 服务管理
 

@@ -5,32 +5,29 @@ import (
 	"testing"
 )
 
-func TestParseWANDevices(t *testing.T) {
+func TestParseDefaultRouteDevicesSortsAndDeduplicates(t *testing.T) {
 	data := []byte("" +
-		"network.wan=interface\n" +
-		"network.wan.proto='none'\n" +
-		"network.wan.device='eth1'\n" +
-		"network.wan6=interface\n" +
-		"network.wan6.proto='dhcpv6'\n" +
-		"network.wan101=interface\n" +
-		"network.wan101.proto='dhcp'\n" +
-		"network.wan101.device='eth1.101'\n" +
-		"network.wan102=interface\n" +
-		"network.wan102.proto='dhcp'\n" +
-		"network.wan102.device='eth1.102'\n" +
-		"network.wan103=interface\n" +
-		"network.wan103.proto='dhcp'\n" +
-		"network.wan103.device='eth1.103'\n" +
-		"network.wan104=interface\n" +
-		"network.wan104.proto='dhcp'\n" +
-		"network.wan104.device='eth1.104'\n")
+		"10.20.0.0/16 dev uplink-a scope link\n" +
+		"default via 10.20.0.1 dev uplink-b table 20 metric 20\n" +
+		"default via 10.20.0.1 dev uplink-a table 10 metric 10\n" +
+		"default via 10.20.0.1 dev uplink-a metric 30\n" +
+		"default dev ppp0 metric 5\n" +
+		"default via 192.0.2.1 metric 1\n")
 
-	got, err := parseWANDevices(data)
-	if err != nil {
-		t.Fatalf("parseWANDevices() 失败: %v", err)
-	}
-	want := []string{"eth1.101", "eth1.102", "eth1.103", "eth1.104"}
+	got := parseDefaultRouteDevices(data)
+	want := []string{"ppp0", "uplink-a", "uplink-b"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("WAN 设备 = %#v, want %#v", got, want)
+		t.Fatalf("默认路由设备 = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseDefaultRouteDevicesSortsEqualMetricsByName(t *testing.T) {
+	data := []byte("default via 192.0.2.1 dev uplink-z metric 10\n" +
+		"default via 192.0.2.1 dev uplink-a metric 10\n")
+
+	got := parseDefaultRouteDevices(data)
+	want := []string{"uplink-a", "uplink-z"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("相同 metric 的默认路由设备 = %#v, want %#v", got, want)
 	}
 }
