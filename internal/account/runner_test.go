@@ -125,8 +125,8 @@ func TestRunnerBacksOffAfterNetworkAuthenticationFailure(t *testing.T) {
 		t.Fatalf("认证网络错误摘要 = %q", snapshot.LastError)
 	}
 }
-func TestRunnerWaitsForTriggerAfterNonRetryableError(t *testing.T) {
-	probe := &sequenceProbe{results: []probeResult{{err: categorizedError{category: string(connectivity.CategoryProtocol)}}}}
+func TestRunnerWaitsForTriggerAfterConfigurationError(t *testing.T) {
+	probe := &sequenceProbe{results: []probeResult{{err: categorizedError{category: string(connectivity.CategoryConfiguration)}}}}
 	runner, err := New(testRunnerConfig(true), Dependencies{
 		Probe:         probe,
 		Authenticator: &recordingAuthenticator{},
@@ -145,11 +145,87 @@ func TestRunnerWaitsForTriggerAfterNonRetryableError(t *testing.T) {
 	}()
 	waitForState(t, runner, StateError)
 	if probe.calls() != 1 {
-		t.Fatalf("不可恢复错误被重复探测: %d", probe.calls())
+		t.Fatalf("配置错误被重复探测: %d", probe.calls())
 	}
 	runner.Trigger()
 	cancel()
 	waitForDone(t, done)
+}
+
+func TestRunnerRetriesAfterTransientProbeProtocolError(t *testing.T) {
+	probe := &sequenceProbe{results: []probeResult{
+		{err: categorizedError{category: string(connectivity.CategoryProtocol)}},
+		{result: connectivity.Result{Status: connectivity.StatusAuthenticated}},
+	}}
+	runtime := testRunnerConfig(true)
+	runtime.RetryInitial = 100 * time.Millisecond
+	runtime.RetryMax = 100 * time.Millisecond
+	runner, err := New(runtime, Dependencies{
+		Probe:         probe,
+		Authenticator: &recordingAuthenticator{},
+		Credentials:   &testResolver{value: "synthetic-password"},
+		Jitter:        func(time.Duration) time.Duration { return 0 },
+	})
+	if err != nil {
+		t.Fatalf("New() 失败: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		runner.Run(ctx)
+		close(done)
+	}()
+	waitForState(t, runner, StateBackoff)
+	waitForState(t, runner, StateAuthenticated)
+	cancel()
+	waitForDone(t, done)
+
+	if probe.calls() != 2 {
+		t.Fatalf("探测次数 = %d, want 2", probe.calls())
+	}
+	if snapshot := runner.Snapshot(); snapshot.RetryCount != 0 || snapshot.ErrorCategory != "" {
+		t.Fatalf("恢复后的状态摘要 = %+v", snapshot)
+	}
+}
+
+func TestRunnerRetriesAfterTransientPortalProtocolError(t *testing.T) {
+	portalURL, _ := url.Parse("http://portal.example.test/login")
+	probe := &sequenceProbe{results: []probeResult{
+		{result: connectivity.Result{Status: connectivity.StatusPortal, RedirectURL: portalURL}},
+		{result: connectivity.Result{Status: connectivity.StatusPortal, RedirectURL: portalURL}},
+		{result: connectivity.Result{Status: connectivity.StatusAuthenticated}},
+	}}
+	runtime := testRunnerConfig(true)
+	runtime.RetryInitial = 100 * time.Millisecond
+	runtime.RetryMax = 100 * time.Millisecond
+	authenticator := &sequenceAuthenticator{errors: []error{
+		categorizedError{category: string(portal.CategoryProtocol)},
+	}}
+	runner, err := New(runtime, Dependencies{
+		Probe:         probe,
+		Authenticator: authenticator,
+		Credentials:   &testResolver{value: "synthetic-password"},
+		Jitter:        func(time.Duration) time.Duration { return 0 },
+	})
+	if err != nil {
+		t.Fatalf("New() 失败: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		runner.Run(ctx)
+		close(done)
+	}()
+	waitForState(t, runner, StateBackoff)
+	waitForState(t, runner, StateAuthenticated)
+	cancel()
+	waitForDone(t, done)
+
+	if probe.calls() != 3 || authenticator.calls() != 2 {
+		t.Fatalf("请求次数 probe=%d authenticate=%d, want 3 and 2", probe.calls(), authenticator.calls())
+	}
 }
 
 func TestRunnerCancellationStopsBlockedRequest(t *testing.T) {
@@ -381,6 +457,29 @@ func (authenticator *recordingAuthenticator) credentials() (string, string) {
 	authenticator.mu.Lock()
 	defer authenticator.mu.Unlock()
 	return authenticator.username, authenticator.password
+}
+
+type sequenceAuthenticator struct {
+	mu     sync.Mutex
+	errors []error
+	count  int
+}
+
+func (authenticator *sequenceAuthenticator) Authenticate(context.Context, *url.URL, string, string) error {
+	authenticator.mu.Lock()
+	defer authenticator.mu.Unlock()
+	index := authenticator.count
+	authenticator.count++
+	if index < len(authenticator.errors) {
+		return authenticator.errors[index]
+	}
+	return nil
+}
+
+func (authenticator *sequenceAuthenticator) calls() int {
+	authenticator.mu.Lock()
+	defer authenticator.mu.Unlock()
+	return authenticator.count
 }
 
 type categorizedError struct {

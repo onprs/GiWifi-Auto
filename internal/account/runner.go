@@ -277,8 +277,7 @@ func (r *Runner) step(ctx context.Context) (time.Duration, bool) {
 			r.emit(StateOffline, "check", category, "网络暂时不可达", nil)
 			return r.scheduleBackoff(category, "等待网络恢复")
 		}
-		r.emit(StateError, "check", category, "网络探测失败，需要检查配置或协议", nil)
-		return 0, true
+		return r.retryOrWait("check", category, "网络探测失败，需要检查配置或协议")
 	}
 
 	r.setLastResult(result.Status)
@@ -292,16 +291,14 @@ func (r *Runner) step(ctx context.Context) (time.Duration, bool) {
 	case connectivity.StatusPortal:
 		return r.authenticate(ctx, result)
 	default:
-		r.emit(StateError, "check", "protocol", "网络探测返回未知状态", nil)
-		return 0, true
+		return r.retryOrWait("check", "protocol", "网络探测返回未知状态")
 	}
 }
 
 func (r *Runner) authenticate(ctx context.Context, result connectivity.Result) (time.Duration, bool) {
 	r.emit(StatePortal, "discover", "", "检测到认证 Portal", nil)
 	if result.RedirectURL == nil {
-		r.emit(StateError, "discover", string(portal.CategoryPageParse), "Portal 未提供登录页面地址", nil)
-		return 0, true
+		return r.retryOrWait("discover", string(portal.CategoryPageParse), "Portal 未提供登录页面地址")
 	}
 
 	credentialContext, cancel := context.WithTimeout(ctx, r.config.RequestTimeout)
@@ -312,8 +309,7 @@ func (r *Runner) authenticate(ctx context.Context, result connectivity.Result) (
 			return 0, true
 		}
 		category := errorCategory(err, string(credential.CategoryUnavailable))
-		r.emit(StateError, "credential", category, "无法读取账号凭据", nil)
-		return 0, true
+		return r.retryOrWait("credential", category, "无法读取账号凭据")
 	}
 
 	r.emit(StateAuthenticating, "authenticate", "", "正在提交认证请求", nil)
@@ -329,8 +325,7 @@ func (r *Runner) authenticate(ctx context.Context, result connectivity.Result) (
 			r.emit(StateOffline, "authenticate", category, "认证网络暂时不可达", nil)
 			return r.scheduleBackoff(category, "等待认证网络恢复")
 		}
-		r.emit(StateError, "authenticate", category, "认证请求失败，需要检查配置或协议", nil)
-		return 0, true
+		return r.retryOrWait("authenticate", category, "认证请求失败，需要检查配置或协议")
 	}
 
 	r.emit(StateChecking, "verify", "", "正在复检网络状态", nil)
@@ -344,8 +339,7 @@ func (r *Runner) authenticate(ctx context.Context, result connectivity.Result) (
 			r.emit(StateOffline, "verify", category, "认证后网络仍不可达", nil)
 			return r.scheduleBackoff(category, "等待网络恢复")
 		}
-		r.emit(StateError, "verify", category, "认证后网络复检失败", nil)
-		return 0, true
+		return r.retryOrWait("verify", category, "认证后网络复检失败")
 	}
 	r.setLastResult(verified.Status)
 	if verified.Status != connectivity.StatusAuthenticated {
@@ -380,6 +374,26 @@ func (r *Runner) scheduleBackoff(category, message string) (time.Duration, bool)
 	r.mu.Unlock()
 	r.publish(event)
 	return delay, false
+}
+
+func (r *Runner) retryOrWait(operation, category, message string) (time.Duration, bool) {
+	if requiresManualIntervention(category) {
+		r.emit(StateError, operation, category, message, nil)
+		return 0, true
+	}
+	return r.scheduleBackoff(category, message)
+}
+
+func requiresManualIntervention(category string) bool {
+	switch category {
+	case string(connectivity.CategoryConfiguration),
+		string(credential.CategoryConfiguration),
+		string(credential.CategoryNotFound),
+		string(credential.CategoryAccess):
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *Runner) markAuthenticated(operation string) {
