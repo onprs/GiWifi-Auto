@@ -1,3 +1,6 @@
+# 文本文件统一 LF 换行，兼容 Windows/Ubuntu 共享工作区
+* text=auto eol=lf
+
 *.sh text eol=lf
 /Makefile text eol=lf
 /openwrt/config.example text eol=lf
