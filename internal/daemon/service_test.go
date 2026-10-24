@@ -66,11 +66,12 @@ func TestServiceCompletesAuthenticationAndVerification(t *testing.T) {
 	cfg.Runtime.RequestTimeoutSeconds = 2
 	cfg.Runtime.CheckIntervalSeconds = 3600
 	cfg.Accounts = []config.AccountConfig{{
-		ID:            "service-account",
-		DisplayName:   "服务测试账号",
-		Username:      "user@example.test",
-		CredentialRef: "env:GIWIFI_SERVICE_PASSWORD",
-		Enabled:       true,
+		ID:               "service-account",
+		DisplayName:      "服务测试账号",
+		Username:         "user@example.test",
+		CredentialRef:    "env:GIWIFI_SERVICE_PASSWORD",
+		Enabled:          true,
+		NetworkInterface: "lo",
 	}}
 
 	service, err := New(cfg, "", Dependencies{})
@@ -152,8 +153,8 @@ func TestServiceLimitsConcurrentNetworkRequests(t *testing.T) {
 	cfg.Runtime.MaxConcurrentRequests = 1
 	cfg.Runtime.CheckIntervalSeconds = 3600
 	cfg.Accounts = []config.AccountConfig{
-		{ID: "limited-one", DisplayName: "并发账号一", Username: "one@example.test", CredentialRef: "env:GIWIFI_ONE", Enabled: true},
-		{ID: "limited-two", DisplayName: "并发账号二", Username: "two@example.test", CredentialRef: "env:GIWIFI_TWO", Enabled: true},
+		{ID: "limited-one", DisplayName: "并发账号一", Username: "one@example.test", CredentialRef: "env:GIWIFI_ONE", Enabled: true, NetworkInterface: "lo"},
+		{ID: "limited-two", DisplayName: "并发账号二", Username: "two@example.test", CredentialRef: "env:GIWIFI_TWO", Enabled: true, NetworkInterface: "lo"},
 	}
 	service, err := New(cfg, "", Dependencies{})
 	if err != nil {
