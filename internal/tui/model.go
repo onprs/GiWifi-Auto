@@ -139,6 +139,8 @@ func (current model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return current, callAction(current.ctx, current.address, daemon.MethodReload, struct{}{})
 		case "e":
 			return current, current.setSelectedEnabled(true)
+		case "n":
+			return current, current.renewSelected()
 		case "d":
 			return current, current.setSelectedEnabled(false)
 		case "D", "delete":
@@ -222,7 +224,7 @@ func (current model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case actionMessage:
 		current.loading = false
 		if message.err != nil {
-			current.err = "操作未完成"
+			current.err = actionError(message.err)
 		} else {
 			current.err = ""
 		}
@@ -305,10 +307,12 @@ func (current model) View() string {
 		add("")
 		add(sectionHeading("操作", width))
 		for _, line := range []string{
-			"点击账号行选择账号",
-			"点击底部按钮执行操作",
-			"滚轮切换账号",
-			"点击帮助按钮返回面板",
+			"点击账号行选择账号，滚轮切换账号",
+			"检测：立即检查所选账号的认证状态",
+			"重连：重新获取所选账号线路的地址",
+			"启用、停用：切换账号是否自动认证",
+			"刷新：重新读取配置、状态与事件",
+			"点击底部按钮执行操作，点击帮助按钮返回面板",
 		} {
 			add(styledLine(mutedStyle, line, width))
 		}
@@ -620,6 +624,26 @@ func (current model) setSelectedEnabled(enabled bool) tea.Cmd {
 		method = daemon.MethodAccountEnable
 	}
 	return callAction(current.ctx, current.address, method, daemon.AccountRequest{ID: id})
+}
+
+func (current model) renewSelected() tea.Cmd {
+	if current.selected < 0 || current.selected >= len(current.accounts) {
+		return nil
+	}
+	id := current.accounts[current.selected].ID
+	return callAction(current.ctx, current.address, daemon.MethodAccountRenew, daemon.AccountRequest{ID: id})
+}
+
+// actionError 组合操作失败提示与服务端返回的原因。
+func actionError(err error) string {
+	if err == nil {
+		return ""
+	}
+	text := strings.TrimSpace(err.Error())
+	if text == "" {
+		return "操作未完成"
+	}
+	return "操作未完成: " + text
 }
 
 type deleteMessage struct {

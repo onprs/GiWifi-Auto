@@ -30,7 +30,7 @@ SSH 登录 OpenWrt 后直接运行：
 giwifi-auto
 ```
 
-进入后通过鼠标操作：点击底部 `新增` 添加账号，点击账号行选择账号，再点击 `编辑`、`检测`、`启用`、`停用`、`删除`、`刷新` 或 `帮助` 执行操作。删除账号需要再次点击确认按钮。填写账号时点击用户名或密码字段获得焦点，再输入内容并点击 `保存`。
+进入后通过鼠标操作：点击底部 `新增` 添加账号，点击账号行选择账号，再点击 `编辑`、`检测`、`重连`、`启用`、`停用`、`删除`、`刷新` 或 `帮助` 执行操作。`重连` 会让所选账号的线路重新获取 IPv4 地址，适合线路长期保留同一地址后认证被服务端反复拒绝的情况。删除账号需要再次点击确认按钮。填写账号时点击用户名或密码字段获得焦点，再输入内容并点击 `保存`。
 
 程序会根据 OpenWrt 当前运行状态自动识别可用上联线路和 IPv4 路由，并按线路优先级为账号分配认证线路。添加账号时只需填写用户名和密码，无需填写 VLAN、网卡或路由信息。
 
@@ -52,6 +52,7 @@ giwifi-auto
 /usr/bin/giwifi-auto account enable account_primary --config /etc/config/giwifi-auto
 /usr/bin/giwifi-auto account disable account_primary --config /etc/config/giwifi-auto
 /usr/bin/giwifi-auto account trigger account_primary --config /etc/config/giwifi-auto
+/usr/bin/giwifi-auto account renew account_primary --config /etc/config/giwifi-auto
 ```
 
 查看事件：

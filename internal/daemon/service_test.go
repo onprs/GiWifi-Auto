@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -262,6 +263,60 @@ func TestServiceDeleteAccountRemovesConfigurationAndRunner(t *testing.T) {
 	}
 	if _, err := os.Stat(strings.TrimPrefix(credentialRef, "file:")); !os.IsNotExist(err) {
 		t.Fatalf("凭据侧车删除状态 = %v", err)
+	}
+}
+
+func TestServiceRenewAccountRequiresInterface(t *testing.T) {
+	cfg := config.Default()
+	cfg.Runtime.PortalLoginURL = "http://portal.example.test/login"
+	cfg.Accounts = []config.AccountConfig{{
+		ID:            "no-interface",
+		DisplayName:   "未绑定线路账号",
+		Username:      "user@example.test",
+		CredentialRef: "env:GIWIFI_SERVICE_PASSWORD",
+		Enabled:       false,
+	}}
+	service, err := New(cfg, "", Dependencies{RenewInterface: func(context.Context, string) (string, error) {
+		t.Fatal("账号未绑定网络接口时不应发起重连")
+		return "", nil
+	}})
+	if err != nil {
+		t.Fatalf("New() 失败: %v", err)
+	}
+	service.mu.Lock()
+	service.config.Accounts[0].NetworkInterface = ""
+	service.mu.Unlock()
+
+	if _, err := service.RenewAccount(context.Background(), "no-interface"); err == nil || !strings.Contains(err.Error(), "未绑定网络接口") {
+		t.Fatalf("未绑定线路错误 = %v", err)
+	}
+}
+
+func TestServiceRenewAccountReportsRenewFailure(t *testing.T) {
+	cfg := config.Default()
+	cfg.Runtime.PortalLoginURL = "http://portal.example.test/login"
+	cfg.Accounts = []config.AccountConfig{{
+		ID:            "renew-failure",
+		DisplayName:   "重连失败账号",
+		Username:      "user@example.test",
+		CredentialRef: "env:GIWIFI_SERVICE_PASSWORD",
+		Enabled:       false,
+	}}
+	service, err := New(cfg, "", Dependencies{RenewInterface: func(context.Context, string) (string, error) {
+		return "", errors.New("未找到绑定 eth-test 的网络接口")
+	}})
+	if err != nil {
+		t.Fatalf("New() 失败: %v", err)
+	}
+	service.mu.Lock()
+	service.config.Accounts[0].NetworkInterface = "eth-test"
+	service.mu.Unlock()
+
+	if _, err := service.RenewAccount(context.Background(), "renew-failure"); err == nil || !strings.Contains(err.Error(), "未找到绑定 eth-test 的网络接口") {
+		t.Fatalf("重连失败错误 = %v", err)
+	}
+	if _, err := service.RenewAccount(context.Background(), "missing"); err == nil {
+		t.Fatal("不存在的账号未返回错误")
 	}
 }
 

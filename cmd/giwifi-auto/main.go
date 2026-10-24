@@ -346,7 +346,7 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 
 func runAccount(args []string, stdout, stderr io.Writer) int {
 	if len(args) < 2 {
-		fmt.Fprintln(stderr, "用法: giwifi-auto account <enable|disable|trigger> <id> --config <path>")
+		fmt.Fprintln(stderr, "用法: giwifi-auto account <enable|disable|trigger|renew> <id> --config <path>")
 		return 2
 	}
 	action, id := args[0], args[1]
@@ -373,9 +373,20 @@ func runAccount(args []string, stdout, stderr io.Writer) int {
 		method = daemon.MethodAccountDisable
 	case "trigger":
 		method = daemon.MethodAccountTrigger
+	case "renew":
+		method = daemon.MethodAccountRenew
 	default:
 		fmt.Fprintf(stderr, "未知账号操作 %q\n", action)
 		return 2
+	}
+	if action == "renew" {
+		var result daemon.AccountRenewResponse
+		if err := callControl(*configPath, method, daemon.AccountRequest{ID: id}, &result); err != nil {
+			fmt.Fprintf(stderr, "重新获取地址失败: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "账号 %s 已重新获取线路地址: %s (%s)\n", id, result.NetworkInterface, result.NetifdInterface)
+		return 0
 	}
 	if err := callControl(*configPath, method, daemon.AccountRequest{ID: id}, nil); err != nil {
 		fmt.Fprintf(stderr, "账号操作失败: %v\n", err)

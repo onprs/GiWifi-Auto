@@ -27,6 +27,7 @@ func mainMouseButtons(confirm bool) []mouseButton {
 		{ID: "add", Label: "新增"},
 		{ID: "edit", Label: "编辑"},
 		{ID: "trigger", Label: "检测"},
+		{ID: "renew", Label: "重连"},
 		{ID: "enable", Label: "启用"},
 		{ID: "disable", Label: "停用"},
 		{ID: "delete", Label: "删除"},
@@ -197,6 +198,8 @@ func (current model) updateMouse(message tea.MouseMsg) (tea.Model, tea.Cmd) {
 		current.openSelectedAccountForm()
 	case "trigger":
 		return current, current.triggerSelected()
+	case "renew":
+		return current, current.renewSelected()
 	case "enable":
 		return current, current.setSelectedEnabled(true)
 	case "disable":

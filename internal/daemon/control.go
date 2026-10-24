@@ -18,6 +18,7 @@ const (
 	MethodRecentLogs       = "logs.recent"
 	MethodWaitLogs         = "logs.wait"
 	MethodAccountTrigger   = "account.trigger"
+	MethodAccountRenew     = "account.renew"
 	MethodAccountEnable    = "account.enable"
 	MethodAccountDisable   = "account.disable"
 	MethodAccountConfigure = "account.configure"
@@ -69,6 +70,13 @@ type WaitLogsRequest struct {
 // AccountRequest 是账号操作方法的参数。
 type AccountRequest struct {
 	ID string `json:"id"`
+}
+
+// AccountRenewResponse 是 account.renew 方法的返回值。
+type AccountRenewResponse struct {
+	AccountID        string `json:"account_id"`
+	NetworkInterface string `json:"network_interface"`
+	NetifdInterface  string `json:"netifd_interface,omitempty"`
 }
 
 // Service.Handle 将守护进程能力适配到本地控制协议。
@@ -125,6 +133,22 @@ func (service *Service) Handle(ctx context.Context, request control.Request) (in
 			return nil, &control.RPCError{Code: "account_operation_failed", Message: "唤醒账号失败"}
 		}
 		return struct{}{}, nil
+	case MethodAccountRenew:
+		var params AccountRequest
+		if rpcError := decodeParams(request, &params); rpcError != nil {
+			return nil, rpcError
+		}
+		if params.ID == "" {
+			return nil, &control.RPCError{Code: "invalid_params", Message: "账号 ID 不能为空"}
+		}
+		if !service.hasAccount(params.ID) {
+			return nil, &control.RPCError{Code: "account_not_found", Message: "账号不存在"}
+		}
+		result, err := service.RenewAccount(ctx, params.ID)
+		if err != nil {
+			return nil, &control.RPCError{Code: "account_renew_failed", Message: err.Error()}
+		}
+		return result, nil
 	case MethodAccountEnable:
 		return service.setEnabledFromRequest(ctx, request, true)
 	case MethodAccountDisable:

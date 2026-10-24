@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -183,6 +184,49 @@ func TestMouseActionButtonOpensAccountForm(t *testing.T) {
 	current = updated.(model)
 	if command != nil || current.form == nil || current.form.editing {
 		t.Fatalf("鼠标新增账号 = form=%+v command=%v", current.form, command)
+	}
+}
+
+func TestRenewActionIsAvailableFromKeyboardAndButton(t *testing.T) {
+	current := model{
+		accounts: []account.Snapshot{{ID: "primary"}},
+		width:    100,
+		height:   30,
+	}
+	updated, command := current.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	current = updated.(model)
+	if command == nil {
+		t.Fatal("按键 n 未发起重新获取地址操作")
+	}
+
+	actionY := outputLineCount(current.View()) - 1
+	var renewRect mouseButtonRect
+	found := false
+	for _, rect := range mouseButtonRects(mainMouseButtons(false), current.width, actionY) {
+		if rect.ID == "renew" {
+			renewRect = rect
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("底部操作栏缺少重连按钮")
+	}
+	updated, command = current.Update(tea.MouseMsg{X: renewRect.X + 1, Y: actionY, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	current = updated.(model)
+	if command == nil {
+		t.Fatal("点击重连按钮未发起重新获取地址操作")
+	}
+}
+
+func TestActionErrorIncludesReason(t *testing.T) {
+	if got := actionError(errors.New("当前系统不支持重新获取地址")); got != "操作未完成: 当前系统不支持重新获取地址" {
+		t.Fatalf("错误提示 = %q", got)
+	}
+	if got := actionError(errors.New("   ")); got != "操作未完成" {
+		t.Fatalf("空错误提示 = %q", got)
+	}
+	if got := actionError(nil); got != "" {
+		t.Fatalf("无错误提示 = %q", got)
 	}
 }
 

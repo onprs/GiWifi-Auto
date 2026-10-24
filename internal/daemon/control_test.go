@@ -110,6 +110,74 @@ func TestServiceImplementsControlMethods(t *testing.T) {
 	}
 }
 
+func TestServiceControlAccountRenew(t *testing.T) {
+	device := testInterfaceName(t)
+	cfg := config.Default()
+	cfg.Runtime.PortalLoginURL = "http://portal.example.test/login"
+	cfg.Accounts = []config.AccountConfig{{
+		ID:            "renew-account",
+		DisplayName:   "重连测试账号",
+		Username:      "user@example.test",
+		CredentialRef: "env:GIWIFI_RENEW_PASSWORD",
+		Enabled:       false,
+	}}
+	renewed := ""
+	service, err := New(cfg, "", Dependencies{RenewInterface: func(_ context.Context, name string) (string, error) {
+		renewed = name
+		return "wan9", nil
+	}})
+	if err != nil {
+		t.Fatalf("New() 失败: %v", err)
+	}
+	service.mu.Lock()
+	service.config.Accounts[0].NetworkInterface = device
+	service.mu.Unlock()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("创建监听器失败: %v", err)
+	}
+	server, err := control.NewServer(listener, service)
+	if err != nil {
+		t.Fatalf("NewServer() 失败: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = server.Serve(ctx) }()
+
+	callContext, callCancel := context.WithTimeout(context.Background(), time.Second)
+	defer callCancel()
+	var result AccountRenewResponse
+	if err := control.Call(callContext, "tcp://"+listener.Addr().String(), MethodAccountRenew, AccountRequest{ID: "renew-account"}, &result); err != nil {
+		t.Fatalf("account.renew 调用失败: %v", err)
+	}
+	if renewed != device {
+		t.Fatalf("重连设备 = %q, want %q", renewed, device)
+	}
+	if result.AccountID != "renew-account" || result.NetworkInterface != device || result.NetifdInterface != "wan9" {
+		t.Fatalf("account.renew 结果 = %+v", result)
+	}
+
+	_, remoteErr := callRawMethod(t, listener, control.Request{Version: control.ProtocolVersion, ID: "renew-missing", Method: MethodAccountRenew, Params: json.RawMessage(`{"id":"missing"}`)})
+	if remoteErr == nil || remoteErr.Code != "account_not_found" {
+		t.Fatalf("未知账号错误 = %+v", remoteErr)
+	}
+}
+
+func testInterfaceName(t *testing.T) string {
+	t.Helper()
+	interfaces, err := net.Interfaces()
+	if err != nil || len(interfaces) == 0 {
+		t.Skip("当前系统没有可用网络接口")
+	}
+	for _, networkInterface := range interfaces {
+		if networkInterface.Name != "" {
+			return networkInterface.Name
+		}
+	}
+	t.Skip("当前系统没有可用网络接口")
+	return ""
+}
+
 func TestServiceReloadReplacesAccounts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	cfg := config.Default()

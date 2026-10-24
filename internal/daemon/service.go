@@ -24,6 +24,7 @@ import (
 type Dependencies struct {
 	Resolver         credential.Resolver
 	TransportFactory func() http.RoundTripper
+	RenewInterface   InterfaceRenewer
 	Now              func() time.Time
 	Jitter           func(time.Duration) time.Duration
 }
@@ -59,6 +60,9 @@ func New(cfg config.Config, configPath string, deps Dependencies) (*Service, err
 	}
 	if deps.TransportFactory == nil {
 		deps.TransportFactory = defaultTransport
+	}
+	if deps.RenewInterface == nil {
+		deps.RenewInterface = defaultInterfaceRenewer
 	}
 	cfg = autoRepairNetworkInterfaces(context.Background(), cfg)
 
@@ -188,6 +192,60 @@ func (service *Service) Trigger(id string) error {
 	}
 	runner.Trigger()
 	return nil
+}
+
+// RenewAccount 让账号所在线路重新获取地址，并唤醒账号重新认证。
+func (service *Service) RenewAccount(ctx context.Context, id string) (AccountRenewResponse, error) {
+	if ctx == nil {
+		return AccountRenewResponse{}, errors.New("重新获取地址上下文不能为空")
+	}
+	service.mu.RLock()
+	_, exists := service.runners[id]
+	device := ""
+	for _, accountConfig := range service.config.Accounts {
+		if accountConfig.ID == id {
+			device = accountConfig.NetworkInterface
+			break
+		}
+	}
+	renew := service.deps.RenewInterface
+	service.mu.RUnlock()
+	if !exists {
+		return AccountRenewResponse{}, fmt.Errorf("账号 %q 不存在", id)
+	}
+	if strings.TrimSpace(device) == "" {
+		return AccountRenewResponse{}, errors.New("账号未绑定网络接口")
+	}
+	if renew == nil {
+		return AccountRenewResponse{}, errors.New("当前系统不支持重新获取地址")
+	}
+	name, err := renew(ctx, device)
+	if err != nil {
+		return AccountRenewResponse{}, err
+	}
+	service.triggerAfterRenew(id)
+	return AccountRenewResponse{AccountID: id, NetworkInterface: device, NetifdInterface: name}, nil
+}
+
+// triggerAfterRenew 等接口重建完成后再唤醒账号。
+func (service *Service) triggerAfterRenew(id string) {
+	service.mu.RLock()
+	runner, exists := service.runners[id]
+	rootContext := service.rootCtx
+	service.mu.RUnlock()
+	if !exists || rootContext == nil || rootContext.Err() != nil {
+		return
+	}
+	go func() {
+		timer := time.NewTimer(interfaceRenewTriggerDelay)
+		defer timer.Stop()
+		select {
+		case <-rootContext.Done():
+			return
+		case <-timer.C:
+			runner.Trigger()
+		}
+	}()
 }
 
 // SetEnabled 更新账号启用状态，并在配置路径存在时原子保存。
