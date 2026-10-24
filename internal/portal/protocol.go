@@ -29,9 +29,24 @@ const (
 	CategoryCrypto         ErrorCategory = "crypto"
 	CategoryProtocol       ErrorCategory = "protocol"
 	CategoryAuthentication ErrorCategory = "authentication"
+	// CategoryRateLimited 表示 Portal 暂时限制登录频率，稍后重试即可。
+	CategoryRateLimited ErrorCategory = "rate_limit"
+	// CategoryPending 表示 Portal 已受理登录但仍在等待计费开始，需要稍后复检。
+	CategoryPending ErrorCategory = "pending"
+	// CategoryAccountRestricted 表示账号套餐或设备策略拒绝登录，需要人工处理。
+	CategoryAccountRestricted ErrorCategory = "account_restricted"
 )
 
 var ErrAuthenticationRejected = errors.New("authentication rejected")
+
+// ErrAuthenticationRateLimited 表示服务端限制登录频率。
+var ErrAuthenticationRateLimited = errors.New("authentication rate limited")
+
+// ErrAuthenticationPending 表示服务端已受理登录，等待计费开始。
+var ErrAuthenticationPending = errors.New("authentication pending billing")
+
+// ErrAccountRestricted 表示账号套餐或设备策略不允许当前设备上网。
+var ErrAccountRestricted = errors.New("account restricted by portal policy")
 
 // ErrDeviceBindingConfirmationRejected 表示服务端拒绝设备绑定确认。
 var ErrDeviceBindingConfirmationRejected = errors.New("device binding confirmation rejected")
@@ -45,6 +60,10 @@ const (
 	LegacyKey               = "1234567887654321"
 	// DeviceBindingResultCode 是现场 Portal 的 MAC 绑定确认结果码。
 	DeviceBindingResultCode = 124
+	// AccountRestrictedResultCode 是现场 Portal 的套餐设备类型限制结果码。
+	AccountRestrictedResultCode = 123
+	// RateLimitedDataCode 是现场 Portal 在 data 字段返回的登录频率限制码。
+	RateLimitedDataCode = 102
 )
 
 var legacyFieldOrder = []string{
@@ -86,12 +105,16 @@ var requiredPageFields = []string{
 
 type loginResponse struct {
 	Status int             `json:"status"`
+	Info   string          `json:"info"`
 	Data   json.RawMessage `json:"data"`
 }
 
+// loginResponseData 对应 data 为对象时的登录结果。
+// resultCode 可能为数字、字符串或 null，resultData 可能是地址字符串或会话对象。
 type loginResponseData struct {
-	ResultCode json.RawMessage `json:"resultCode"`
-	ResultData string          `json:"resultData"`
+	ResultCode    json.RawMessage
+	ResultData    json.RawMessage
+	HasResultCode bool
 }
 
 // Error 保留底层原因，但 Error 文本不回显 URL、凭据或认证载荷。
@@ -123,6 +146,14 @@ func (e *Error) ErrorCategory() string {
 		return ""
 	}
 	return string(e.Category)
+}
+
+// UserMessage 返回可直接展示给用户的原因文本。
+func (e *Error) UserMessage() string {
+	if e == nil {
+		return ""
+	}
+	return e.message
 }
 
 // Page 是从 Portal 登录页提取的隐藏表单字段。
@@ -431,23 +462,98 @@ func (c Client) Authenticate(ctx context.Context, pageURL *url.URL, username, pa
 	if result.Status == 1 {
 		return nil
 	}
-	if result.Status == 0 && len(result.Data) > 0 && string(result.Data) != "null" {
-		var data loginResponseData
-		if err := json.Unmarshal(result.Data, &data); err != nil {
-			return newError(CategoryProtocol, "登录响应数据格式无效", err)
-		}
-		resultCode, valid := parseResultCode(data.ResultCode)
-		if !valid {
-			return newError(CategoryProtocol, "登录响应结果码无效", nil)
-		}
-		if resultCode == DeviceBindingResultCode {
-			if err := c.confirmDeviceBinding(ctx, pageURL, data.ResultData); err != nil {
-				return err
+	return c.handleLoginFailure(ctx, pageURL, result)
+}
+
+// handleLoginFailure 将服务端 status=0 的响应按现场返回结构归类。
+// 现场 Portal 的 data 可能是对象、数字或 null，直接按结构判断会丢掉真实原因。
+func (c Client) handleLoginFailure(ctx context.Context, pageURL *url.URL, result loginResponse) error {
+	info := strings.TrimSpace(result.Info)
+
+	if data, ok := decodeLoginResponseData(result.Data); ok {
+		if resultCode, valid := parseResultCode(data.ResultCode); valid {
+			switch resultCode {
+			case DeviceBindingResultCode:
+				bindingURL, valid := decodeJSONText(data.ResultData)
+				if !valid || strings.TrimSpace(bindingURL) == "" {
+					return newError(CategoryProtocol, "设备绑定确认地址无效", nil)
+				}
+				if err := c.confirmDeviceBinding(ctx, pageURL, bindingURL); err != nil {
+					return err
+				}
+				return nil
+			case AccountRestrictedResultCode:
+				return newError(CategoryAccountRestricted, withServerInfo("认证被服务端拒绝", info), ErrAccountRestricted)
+			default:
+				return newError(CategoryAuthentication, withServerInfo("认证被服务端拒绝", info), ErrAuthenticationRejected)
 			}
-			return nil
 		}
+		// resultCode 为 null：现场 Portal 在等待计费开始时返回这种结构。
+		if data.HasResultCode {
+			return newError(CategoryPending, withServerInfo("认证已受理，等待计费开始", info), ErrAuthenticationPending)
+		}
+		return newError(CategoryAuthentication, withServerInfo("认证被服务端拒绝", info), ErrAuthenticationRejected)
 	}
-	return newError(CategoryAuthentication, "认证被服务端拒绝", ErrAuthenticationRejected)
+
+	if code, valid := parseDataCode(result.Data); valid && code == RateLimitedDataCode {
+		return newError(CategoryRateLimited, withServerInfo("认证请求过于频繁", info), ErrAuthenticationRateLimited)
+	}
+	return newError(CategoryAuthentication, withServerInfo("认证被服务端拒绝", info), ErrAuthenticationRejected)
+}
+
+// withServerInfo 拼接服务端返回的原因文本，缺失时只保留本地说明。
+func withServerInfo(message, info string) string {
+	if info == "" {
+		return message
+	}
+	return message + "：" + info
+}
+
+// decodeLoginResponseData 在 data 是 JSON 对象时解码登录结果。
+func decodeLoginResponseData(raw json.RawMessage) (loginResponseData, bool) {
+	value := bytes.TrimSpace(raw)
+	if len(value) == 0 || value[0] != '{' {
+		return loginResponseData{}, false
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(value, &fields); err != nil {
+		return loginResponseData{}, false
+	}
+	data := loginResponseData{}
+	if code, exists := fields["resultCode"]; exists {
+		data.ResultCode = code
+		data.HasResultCode = true
+	}
+	if resultData, exists := fields["resultData"]; exists {
+		data.ResultData = resultData
+	}
+	return data, true
+}
+
+// parseDataCode 解析 data 为数字时的结果码。
+func parseDataCode(raw json.RawMessage) (int, bool) {
+	value := bytes.TrimSpace(raw)
+	if len(value) == 0 || bytes.Equal(value, []byte("null")) {
+		return 0, false
+	}
+	var number int
+	if err := json.Unmarshal(value, &number); err != nil {
+		return 0, false
+	}
+	return number, true
+}
+
+// decodeJSONText 解析 resultData 为地址字符串，对象或 null 视为缺失。
+func decodeJSONText(raw json.RawMessage) (string, bool) {
+	value := bytes.TrimSpace(raw)
+	if len(value) == 0 || value[0] != '"' {
+		return "", false
+	}
+	var text string
+	if err := json.Unmarshal(value, &text); err != nil {
+		return "", false
+	}
+	return text, true
 }
 
 func defaultLoginEndpoint(pageURL *url.URL) (*url.URL, error) {
@@ -467,7 +573,8 @@ func decodeLoginResponse(body []byte) (loginResponse, error) {
 }
 
 func parseResultCode(raw json.RawMessage) (int, bool) {
-	if len(raw) == 0 {
+	value := bytes.TrimSpace(raw)
+	if len(value) == 0 || bytes.Equal(value, []byte("null")) {
 		return 0, false
 	}
 	var number int

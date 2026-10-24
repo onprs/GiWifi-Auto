@@ -125,6 +125,93 @@ func TestRunnerBacksOffAfterNetworkAuthenticationFailure(t *testing.T) {
 		t.Fatalf("认证网络错误摘要 = %q", snapshot.LastError)
 	}
 }
+func TestRunnerWaitsForTriggerAfterAccountRestriction(t *testing.T) {
+	portalURL, _ := url.Parse("http://portal.example.test/login")
+	probe := &sequenceProbe{results: []probeResult{{result: connectivity.Result{Status: connectivity.StatusPortal, RedirectURL: portalURL}}}}
+	runner, err := New(testRunnerConfig(true), Dependencies{
+		Probe: probe,
+		Authenticator: &recordingAuthenticator{err: describedError{
+			category: string(portal.CategoryAccountRestricted),
+			message:  "认证被服务端拒绝：该账户套餐不支持本类型设备使用!",
+		}},
+		Credentials: &testResolver{value: "synthetic-password"},
+		Jitter:      func(time.Duration) time.Duration { return 0 },
+	})
+	if err != nil {
+		t.Fatalf("New() 失败: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		runner.Run(ctx)
+		close(done)
+	}()
+	waitForState(t, runner, StateError)
+	cancel()
+	waitForDone(t, done)
+
+	snapshot := runner.Snapshot()
+	if snapshot.RetryCount != 0 || snapshot.ErrorCategory != string(portal.CategoryAccountRestricted) {
+		t.Fatalf("账号限制状态摘要 = %+v", snapshot)
+	}
+	if snapshot.LastError != "认证被服务端拒绝：该账户套餐不支持本类型设备使用!" {
+		t.Fatalf("账号限制原因 = %q", snapshot.LastError)
+	}
+	if snapshot.NextAttemptAt != nil {
+		t.Fatalf("账号限制后不应自动重试: %+v", snapshot.NextAttemptAt)
+	}
+}
+
+func TestRunnerBacksOffWithServerReason(t *testing.T) {
+	cases := []struct {
+		name     string
+		category string
+		message  string
+	}{
+		{
+			name:     "登录频率受限",
+			category: string(portal.CategoryRateLimited),
+			message:  "认证请求过于频繁：操作过于频繁,请5秒后再试！",
+		},
+		{
+			name:     "等待计费开始",
+			category: string(portal.CategoryPending),
+			message:  "认证已受理，等待计费开始：认证失败,正在等待计费开始！",
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			portalURL, _ := url.Parse("http://portal.example.test/login")
+			probe := &sequenceProbe{results: []probeResult{{result: connectivity.Result{Status: connectivity.StatusPortal, RedirectURL: portalURL}}}}
+			runner, err := New(testRunnerConfig(true), Dependencies{
+				Probe:         probe,
+				Authenticator: &recordingAuthenticator{err: describedError{category: testCase.category, message: testCase.message}},
+				Credentials:   &testResolver{value: "synthetic-password"},
+				Jitter:        func(time.Duration) time.Duration { return 0 },
+			})
+			if err != nil {
+				t.Fatalf("New() 失败: %v", err)
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				runner.Run(ctx)
+				close(done)
+			}()
+			waitForState(t, runner, StateBackoff)
+			cancel()
+			waitForDone(t, done)
+
+			snapshot := runner.Snapshot()
+			if snapshot.ErrorCategory != testCase.category || snapshot.LastError != testCase.message {
+				t.Fatalf("退避状态摘要 = %+v", snapshot)
+			}
+		})
+	}
+}
+
 func TestRunnerWaitsForTriggerAfterConfigurationError(t *testing.T) {
 	probe := &sequenceProbe{results: []probeResult{{err: categorizedError{category: string(connectivity.CategoryConfiguration)}}}}
 	runner, err := New(testRunnerConfig(true), Dependencies{
@@ -492,6 +579,23 @@ func (err categorizedError) Error() string {
 
 func (err categorizedError) ErrorCategory() string {
 	return err.category
+}
+
+type describedError struct {
+	category string
+	message  string
+}
+
+func (err describedError) Error() string {
+	return err.category + ": " + err.message
+}
+
+func (err describedError) ErrorCategory() string {
+	return err.category
+}
+
+func (err describedError) UserMessage() string {
+	return err.message
 }
 
 var _ credential.Resolver = (*testResolver)(nil)

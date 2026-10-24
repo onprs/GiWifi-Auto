@@ -318,14 +318,20 @@ func (r *Runner) authenticate(ctx context.Context, result connectivity.Result) (
 			return 0, true
 		}
 		category := errorCategory(err, "internal")
-		if category == string(portal.CategoryAuthentication) {
-			return r.scheduleBackoff(category, "认证未被接受")
-		}
-		if category == string(portal.CategoryNetwork) {
+		switch category {
+		case string(portal.CategoryAuthentication):
+			return r.scheduleBackoff(category, errorMessage(err, "认证未被接受"))
+		case string(portal.CategoryRateLimited), string(portal.CategoryPending):
+			return r.scheduleBackoff(category, errorMessage(err, "认证请求暂时被限制"))
+		case string(portal.CategoryAccountRestricted):
+			// 套餐或设备策略限制无法通过重试解决，等待人工处理后重新触发。
+			return r.retryOrWait("authenticate", category, errorMessage(err, "账号被服务端限制，需要人工处理"))
+		case string(portal.CategoryNetwork):
 			r.emit(StateOffline, "authenticate", category, "认证网络暂时不可达", nil)
 			return r.scheduleBackoff(category, "等待认证网络恢复")
+		default:
+			return r.retryOrWait("authenticate", category, errorMessage(err, "认证请求失败，需要检查配置或协议"))
 		}
-		return r.retryOrWait("authenticate", category, "认证请求失败，需要检查配置或协议")
 	}
 
 	r.emit(StateChecking, "verify", "", "正在复检网络状态", nil)
@@ -389,7 +395,8 @@ func requiresManualIntervention(category string) bool {
 	case string(connectivity.CategoryConfiguration),
 		string(credential.CategoryConfiguration),
 		string(credential.CategoryNotFound),
-		string(credential.CategoryAccess):
+		string(credential.CategoryAccess),
+		string(portal.CategoryAccountRestricted):
 		return true
 	default:
 		return false
@@ -494,6 +501,18 @@ func errorCategory(err error, fallback string) string {
 	var categorized interface{ ErrorCategory() string }
 	if errors.As(err, &categorized) && categorized.ErrorCategory() != "" {
 		return categorized.ErrorCategory()
+	}
+	return fallback
+}
+
+// errorMessage 取错误自带的原因文本，没有时使用调用方提供的默认说明。
+func errorMessage(err error, fallback string) string {
+	if err == nil {
+		return fallback
+	}
+	var described interface{ UserMessage() string }
+	if errors.As(err, &described) && described.UserMessage() != "" {
+		return described.UserMessage()
 	}
 	return fallback
 }

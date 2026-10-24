@@ -319,6 +319,82 @@ func TestAuthenticateReportsRejectedLogin(t *testing.T) {
 	}
 }
 
+func TestAuthenticateClassifiesRealLoginRejections(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		category ErrorCategory
+		sentinel error
+		message  string
+	}{
+		{
+			name:     "challege 被拒绝",
+			body:     `{"data":0,"info":"CHALLENGE_ERR_DENY","status":0}`,
+			category: CategoryAuthentication,
+			sentinel: ErrAuthenticationRejected,
+			message:  "认证被服务端拒绝：CHALLENGE_ERR_DENY",
+		},
+		{
+			name:     "登录频率受限",
+			body:     `{"data":102,"info":"操作过于频繁,请5秒后再试！","status":0}`,
+			category: CategoryRateLimited,
+			sentinel: ErrAuthenticationRateLimited,
+			message:  "认证请求过于频繁：操作过于频繁,请5秒后再试！",
+		},
+		{
+			name:     "等待计费开始",
+			body:     `{"data":{"resultCode":null,"resultData":{"acct_session_id":"bras_GIWIFI-BAS0001","login_time":1},"token":"token"},"info":"认证失败,正在等待计费开始！","status":0}`,
+			category: CategoryPending,
+			sentinel: ErrAuthenticationPending,
+			message:  "认证已受理，等待计费开始：认证失败,正在等待计费开始！",
+		},
+		{
+			name:     "套餐不支持设备类型",
+			body:     `{"data":{"resultCode":123,"resultData":null,"token":"token"},"info":"该账户套餐不支持本类型设备使用!","status":0}`,
+			category: CategoryAccountRestricted,
+			sentinel: ErrAccountRestricted,
+			message:  "认证被服务端拒绝：该账户套餐不支持本类型设备使用!",
+		},
+		{
+			name:     "结果码为字符串",
+			body:     `{"data":{"resultCode":"123","resultData":null},"info":"","status":0}`,
+			category: CategoryAccountRestricted,
+			sentinel: ErrAccountRestricted,
+			message:  "认证被服务端拒绝",
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path == "/portal" {
+					_, _ = writer.Write([]byte(sampleLoginPage()))
+					return
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = writer.Write([]byte(testCase.body))
+			}))
+			defer server.Close()
+
+			loginEndpoint, _ := url.Parse(server.URL + "/login")
+			pageURL, _ := url.Parse(server.URL + "/portal")
+			client := NewClient(loginEndpoint)
+			client.Timeout = time.Second
+
+			err := client.Authenticate(context.Background(), pageURL, "user@example.test", "password-placeholder")
+			if !errors.Is(err, testCase.sentinel) {
+				t.Fatalf("错误 = %T %v, want %v", err, err, testCase.sentinel)
+			}
+			var portalErr *Error
+			if !errors.As(err, &portalErr) || portalErr.Category != testCase.category {
+				t.Fatalf("错误分类 = %T %v, want %s", err, err, testCase.category)
+			}
+			if portalErr.UserMessage() != testCase.message {
+				t.Fatalf("原因文本 = %q, want %q", portalErr.UserMessage(), testCase.message)
+			}
+		})
+	}
+}
+
 func TestAuthenticateRejectsTrailingLoginJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/portal" {
