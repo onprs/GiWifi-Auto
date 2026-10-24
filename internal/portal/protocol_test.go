@@ -72,9 +72,34 @@ func TestBuildLegacyFormKeepsProtocolOrderAndEscaping(t *testing.T) {
 	if iv != "1234567890abcdef" {
 		t.Fatalf("iv = %q", iv)
 	}
-	want := "sign=sig%26%2Bvalue&sta_vlan=sta_vlan-value&sta_port=sta_port-value&sta_ip=sta_ip-value&nas_ip=nas_ip-value&nas_name=nas_name-value&last_url=last_url-value&request_ip=request_ip-value&device_mode=device_mode-value&device_type=device_type-value&device_os_type=device_os_type-value&is_mobile=is_mobile-value&iv=1234567890abcdef&login_type=login_type-value&account_type=2&user_account=user%40example.test&user_password=p%2Bword%20value"
+	want := "sign=sig%26%2Bvalue&sta_vlan=sta_vlan-value&sta_port=sta_port-value&sta_ip=sta_ip-value&nas_ip=nas_ip-value&nas_name=nas_name-value&last_url=last_url-value&request_ip=request_ip-value&device_mode=device_mode-value&device_type=device_type-value&device_os_type=device_os_type-value&is_mobile=is_mobile-value&iv=1234567890abcdef&sta_type=1&login_type=login_type-value&account_type=2&user_account=user%40example.test&user_password=p%2Bword%20value"
 	if form != want {
 		t.Fatalf("表单 = %q, want %q", form, want)
+	}
+}
+
+func TestBuildLegacyFormUsesDeviceTypeForStaType(t *testing.T) {
+	page, err := ParseLoginPage(strings.NewReader(sampleLoginPage()), 4096)
+	if err != nil {
+		t.Fatalf("ParseLoginPage() 失败: %v", err)
+	}
+
+	page.Fields["device_type"] = "2"
+	form, _, err := BuildLegacyForm(page, "user@example.test", "password-placeholder")
+	if err != nil {
+		t.Fatalf("BuildLegacyForm() 失败: %v", err)
+	}
+	if !strings.Contains(form, "&iv=1234567890abcdef&sta_type=2&") {
+		t.Fatalf("表单未使用页面设备类型填充 sta_type: %q", form)
+	}
+
+	page.Fields["sta_type"] = "3"
+	form, _, err = BuildLegacyForm(page, "user@example.test", "password-placeholder")
+	if err != nil {
+		t.Fatalf("BuildLegacyForm() 失败: %v", err)
+	}
+	if !strings.Contains(form, "&iv=1234567890abcdef&sta_type=3&") {
+		t.Fatalf("表单未保留页面下发的 sta_type: %q", form)
 	}
 }
 

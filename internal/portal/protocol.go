@@ -80,6 +80,7 @@ var legacyFieldOrder = []string{
 	"device_os_type",
 	"is_mobile",
 	"iv",
+	"sta_type",
 	"login_type",
 	"account_type",
 	"user_account",
@@ -315,6 +316,16 @@ func BuildLegacyForm(page Page, username, password string) (string, string, erro
 		case "account_type":
 			if value == "" {
 				value = "2"
+			}
+		case "sta_type":
+			// 登录页由脚本按设备能力填充 sta_type，服务端未填充时使用页面下发的设备类型。
+			if value == "" {
+				value = page.Fields["device_type"]
+				switch value {
+				case "1", "2", "3":
+				default:
+					value = "1"
+				}
 			}
 		case "user_account":
 			value = username
